@@ -31,15 +31,7 @@ if (args.watch) {
 
 function imageHTML(response, filepath)
 {
-    imageSize(path.join(args.dir, filepath), (err, dimensions) => {
-        if (err) {
-            response.writeHead(404);
-            response.write(err + "\n");
-            response.end();
-            return;
-        }
-        console.log(err, dimensions);
-        response.writeHead(200);
+    imageSize(filepath, (err, dimensions) => {
         const str = `
 <html>
   <head title="${filepath}">
@@ -65,7 +57,7 @@ function imageHTML(response, filepath)
 &nbsp;
      </p>
      <p>
-       &nbsp;&nbsp;&nbsp;&nbsp;<a href="${filepath}?prev">Previous</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${filepath}?next">Next</a>
+       &nbsp;&nbsp;&nbsp;&nbsp;<a href="${filepath}?prev">Previous</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${filepath}?next">Next</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${path.dirname(filepath)}">Dir</a>
      </p>
      <a href="${filepath}?next">
        <div class="imgbox">
@@ -98,11 +90,12 @@ img {
   </head>
   <body>
 `;
-    console.log(dir);
+    // console.log(dir);
     dir.dirs.forEach(dirpath => {
         str += `<p><a href="${path.join(dir.relative, dirpath)}">${dirpath}</a></p>
 `;
     });
+    // console.log(dir, dir.relative);
     dir.images.forEach(img => {
         str += `<p><a href="${path.join(dir.relative, img)}"><img src="${path.join(dir.relative, img)}?data"></img></a></p>\n`;
     });
@@ -125,13 +118,13 @@ http.createServer(function(request, response) {
     // console.log(request.url);
     const u = url.parse(request.url);
     u.pathname = decodeURIComponent(u.pathname);
-    console.log(u.pathname);
+    // console.log(u.pathname);
     const filePath = path.join(args.dir, u.pathname);
     // console.log(u);
     let statVal = stat(filePath);
     // console.log(statVal);
     if (!statVal) {
-        response.writeHead(404);
+        response.writeHead(301, { Location: "/" });
         response.end();
         return;
     }
@@ -164,7 +157,7 @@ http.createServer(function(request, response) {
         }
 
         if (u.query === "next" || u.query === "prev") {
-            let idx = d.images.indexOf(u.pathname.substr(1));
+            let idx = d.images.indexOf(path.basename(u.pathname));
             if (idx === -1) {
                 imageHTML(response, u.pathname);
                 return;

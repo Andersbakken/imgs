@@ -5,7 +5,7 @@ class Dir
 {
     constructor(root, path)
     {
-        console.log("CRAP", path);
+        // console.log("CRAP", path);
         if (path[path.length - 1] !== "/") {
             path += "/";
         }
@@ -14,11 +14,11 @@ class Dir
         this.dirs = [];
         if (path !== root) {
             this.dirs.push("..");
-            this.relative = "/";
-        } else {
             this.relative = path.substr(root.length - 1);
+        } else {
+            this.relative = "/";
         }
-        console.log("shit", root, path);
+        // console.log("shit", root, path);
         try {
             fs.readdirSync(path, { withFileTypes: true }).forEach(entry => {
                 // console.log(entry);
