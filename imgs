@@ -1,0 +1,224 @@
+#!/usr/bin/env node
+
+const args = require("minimist")(process.argv.slice(2));
+const http = require("http");
+const url = require("url");
+const path = require("path");
+const fs = require("fs");
+const imageSize = require("image-size");
+const Dir = require("./Dir");
+const isImage = require("./isImage");
+
+if (!args.dir) {
+    console.error("No --dir");
+    process.exit(1);
+}
+
+if (args.dir[args.dir.length - 1] !== "/") {
+    args.dir += "/";
+}
+if (!args.port) {
+    console.error("No --port");
+    process.exit(1);
+}
+
+if (args.watch) {
+    fs.watch(__dirname, ev => {
+        console.log("got change", ev);
+        process.exit(0);
+    });
+}
+
+function imageHTML(response, filepath)
+{
+    imageSize(path.join(args.dir, filepath), (err, dimensions) => {
+        if (err) {
+            response.writeHead(404);
+            response.write(err + "\n");
+            response.end();
+            return;
+        }
+        console.log(err, dimensions);
+        response.writeHead(200);
+        const str = `
+<html>
+  <head title="${filepath}">
+    <style>
+* {
+    font-size: 25px;
+    margin: 0;
+    padding: 0;
+}
+.imgbox {
+    display: grid;
+    height: 100%;
+}
+.center-fit {
+    max-width: 100%;
+    max-height: 100vh;
+    margin: auto;
+}
+    </style>
+  </head>
+  <body>
+     <p>
+&nbsp;
+     </p>
+     <p>
+       &nbsp;&nbsp;&nbsp;&nbsp;<a href="${filepath}?prev">Previous</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${filepath}?next">Next</a>
+     </p>
+     <a href="${filepath}?next">
+       <div class="imgbox">
+         <img class="center-fit" src="${filepath}?data"/>
+       </div>
+     </a>
+  </body>
+</html>`;
+        response.write(str);
+        response.end();
+    });
+}
+
+function dirHTML(response, dir)
+{
+    let str = `
+<html>
+  <head title="${dir.relative}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+* {
+  box-sizing: border-box;
+}
+
+img {
+  width: 100px;
+  heigh: 100px;
+}
+    </style>
+  </head>
+  <body>
+`;
+    console.log(dir);
+    dir.dirs.forEach(dirpath => {
+        str += `<p><a href="${path.join(dir.relative, dirpath)}">${dirpath}</a></p>
+`;
+    });
+    dir.images.forEach(img => {
+        str += `<p><a href="${path.join(dir.relative, img)}"><img src="${path.join(dir.relative, img)}?data"></img></a></p>\n`;
+    });
+    str += "</body>\n</html>";
+
+    response.write(str);
+    response.end();
+}
+
+function stat(fp)
+{
+    try {
+        return fs.statSync(fp);
+    } catch (err) {
+    }
+    return undefined;
+}
+
+http.createServer(function(request, response) {
+    // console.log(request.url);
+    const u = url.parse(request.url);
+    u.pathname = decodeURIComponent(u.pathname);
+    console.log(u.pathname);
+    const filePath = path.join(args.dir, u.pathname);
+    // console.log(u);
+    let statVal = stat(filePath);
+    // console.log(statVal);
+    if (!statVal) {
+        response.writeHead(404);
+        response.end();
+        return;
+    }
+
+    if (statVal.isDirectory()) {
+        const d = new Dir(args.dir, filePath);
+        // console.log(d);
+        // imagesInDir(filePath);
+        dirHTML(response, d);
+        return;
+    }
+
+    if (statVal.isFile() && isImage(filePath)) {
+        // console.log("got here", u.pathname, u.query);
+        const d = new Dir(args.dir, path.dirname(filePath));
+        if (u.query === "data") {
+            fs.readFile(filePath, "binary", (err, file) => {
+                if(err) {
+                    response.writeHead(404, {"Content-Type": "text/plain"});
+                    response.write(err + "\n");
+                    response.end();
+                    return;
+                }
+
+                response.writeHead(200);
+                response.write(file, "binary");
+                response.end();
+            });
+            return;
+        }
+
+        if (u.query === "next" || u.query === "prev") {
+            let idx = d.images.indexOf(u.pathname.substr(1));
+            if (idx === -1) {
+                imageHTML(response, u.pathname);
+                return;
+            }
+            if (u.query === "next") {
+                if (++idx === d.images.length) {
+                    idx = 0;
+                }
+            } else {
+                if (idx-- === 0) {
+                    idx = d.images.length - 1;
+                }
+            }
+
+            response.writeHead(301, { Location: path.join(d.relative, d.images[idx]) });
+            response.end();
+            return;
+        }
+
+        imageHTML(response, u.pathname);
+        return;
+    }
+
+    response.writeHead(404);
+    response.end();
+    return;
+
+    // console.log(statVal);
+
+    // const filename = path.join(process.cwd(), uri);
+
+    // fs.exists(filename, function(exists) {
+    //     if(!exists) {
+    //         response.writeHead(404, {"Content-Type": "text/plain"});
+    //         response.write("404 Not Found\n");
+    //         response.end();
+    //         return;
+    //     }
+
+    //     if (fs.statSync(filename).isDirectory()) filename += '/index.html';
+
+    //     fs.readFile(filename, "binary", function(err, file) {
+    //         if(err) {
+    //             response.writeHead(500, {"Content-Type": "text/plain"});
+    //             response.write(err + "\n");
+    //             response.end();
+    //             return;
+    //         }
+
+    //         response.writeHead(200);
+    //         response.write(file, "binary");
+    //         response.end();
+    //     });
+    // });
+}).listen(parseInt(args.port, 10));
+
+console.log(args);
