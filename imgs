@@ -29,6 +29,33 @@ if (args.watch) {
     });
 }
 
+function linksHTML(response, filePath)
+{
+    fs.readFile(filePath, "utf-8", (err, data) => {
+        if (err) {
+            response.writeHead(404, {"Content-Type": "text/plain"});
+            response.write(err + "\n");
+            response.end();
+            return;
+        }
+
+        const links = data.split("\n").map(x => {
+            return `    <a href="${x}">${x}</a>`;
+        }).join("\n");
+
+        response.writeHead(200);
+        const payload = `<html>
+  <head>
+  </head>
+  <body>
+${links}
+  </body>`;
+
+        response.write(payload);
+        response.end();
+    });
+}
+
 function imageHTML(response, filepath)
 {
     imageSize(filepath, (err, dimensions) => {
@@ -91,6 +118,7 @@ img {
   <body>
 `;
     // console.log(dir);
+    str += `<p><a href="${path.join(dir.relative, 'bookmark.url')}">Bookmarks</a></p>\n`;
     dir.dirs.forEach(dirpath => {
         str += `<p><a href="${path.join(dir.relative, dirpath)}">${dirpath}</a></p>
 `;
@@ -122,7 +150,6 @@ http.createServer(function(request, response) {
     const filePath = path.join(args.dir, u.pathname);
     // console.log(u);
     let statVal = stat(filePath);
-    // console.log(statVal);
     if (!statVal) {
         response.writeHead(301, { Location: "/" });
         response.end();
@@ -142,7 +169,7 @@ http.createServer(function(request, response) {
         const d = new Dir(args.dir, path.dirname(filePath));
         if (u.query === "data") {
             fs.readFile(filePath, "binary", (err, file) => {
-                if(err) {
+                if (err) {
                     response.writeHead(404, {"Content-Type": "text/plain"});
                     response.write(err + "\n");
                     response.end();
@@ -178,6 +205,9 @@ http.createServer(function(request, response) {
         }
 
         imageHTML(response, u.pathname);
+        return;
+    } else if (filePath.endsWith(".url")) {
+        linksHTML(response, filePath);
         return;
     }
 
