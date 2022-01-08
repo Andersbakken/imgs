@@ -39,7 +39,7 @@ function linksHTML(response, filePath)
             return;
         }
 
-        const links = data.split("\n").map(x => {
+        const links = data.split("\n").filter(x => x.startsWith("http")).map(x => {
             return `    <p><a href="${x}">${x}</a></p>`;
         }).join("\n");
 
