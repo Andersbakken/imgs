@@ -40,7 +40,7 @@ function linksHTML(response, filePath)
         }
 
         const links = data.split("\n").map(x => {
-            return `    <a href="${x}">${x}</a>`;
+            return `    <p><a href="${x}">${x}</a></p>`;
         }).join("\n");
 
         response.writeHead(200);
