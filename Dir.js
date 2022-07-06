@@ -15,7 +15,9 @@ class Dir
         if (path !== root) {
             this.dirs.push("..");
             this.relative = path.substr(root.length - 1);
+            this.root = false;
         } else {
+            this.root = true;
             this.relative = "/";
         }
         // console.log("shit", root, path);

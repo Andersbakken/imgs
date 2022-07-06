@@ -98,7 +98,7 @@ function imageHTML(response, filepath)
     });
 }
 
-function dirHTML(response, dir)
+function dirHTML(url, response, dir)
 {
     let str = `
 <html>
@@ -117,14 +117,30 @@ img {
   </head>
   <body>
 `;
-    // console.log(dir);
-    str += `<p><a href="${path.join(dir.relative, 'bookmark.url')}">Bookmarks</a></p>\n`;
+    if (dir.root) {
+        str += `<p><a href="${path.join(dir.relative, 'bookmark.url')}">Bookmarks</a></p>\n`;
+    }
     dir.dirs.forEach(dirpath => {
         str += `<p><a href="${path.join(dir.relative, dirpath)}">${dirpath}</a></p>
 `;
     });
     // console.log(dir, dir.relative);
-    dir.images.forEach(img => {
+    let images;
+    if (url.query === "z") {
+        images = [];
+        while (dir.images.length) {
+            images.push(dir.images.splice(Math.floor(Math.random() * dir.images.length), 1)[0]);
+        }
+        if (images.length) {
+            str += `<p><a href="${dir.relative}">Unshuffle</a></p>\n`;
+        }
+    } else {
+        images = dir.images;
+        if (images.length) {
+            str += `<p><a href="${dir.relative}?z">Shuffle</a></p>\n`;
+        }
+    }
+    images.forEach(img => {
         str += `<p><a href="${path.join(dir.relative, img)}"><img src="${path.join(dir.relative, img)}?data"></img></a></p>\n`;
     });
     str += "</body>\n</html>";
@@ -160,7 +176,7 @@ http.createServer(function(request, response) {
         const d = new Dir(args.dir, filePath);
         // console.log(d);
         // imagesInDir(filePath);
-        dirHTML(response, d);
+        dirHTML(u, response, d);
         return;
     }
 
