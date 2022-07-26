@@ -12,6 +12,7 @@ class Dir
         this.path = path;
         this.images = [];
         this.dirs = [];
+        this.bookmarks = false;
         if (path !== root) {
             this.dirs.push("..");
             this.relative = path.substr(root.length - 1);
@@ -27,6 +28,8 @@ class Dir
                 if (entry.isFile()) {
                     if (isImage(entry.name)) {
                         this.images.push(entry.name);
+                    } else if (this.root && entry.name.endsWith(".url")) {
+                        this.bookmarks = true;
                     }
                 } else if (entry.isDirectory()) {
                     // console.log("got dir", entry.name);

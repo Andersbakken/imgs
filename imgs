@@ -8,6 +8,31 @@ const fs = require("fs");
 const imageSize = require("image-size");
 const Dir = require("./Dir");
 const isImage = require("./isImage");
+let password;
+
+function pw(str, query)
+{
+    if (!password) {
+        if (query) {
+            if (str.indexOf("?") !== -1) {
+                str += "&" + query;
+            } else {
+                str += "?" + query;
+            }
+        }
+        return str;
+    }
+
+    if (str.indexOf("?") !== -1) {
+        str += "&pw=" + password;
+    } else {
+        str += "?pw=" + password;
+    }
+    if (query) {
+        str += "&" + query;
+    }
+    return str;
+}
 
 if (!args.dir) {
     console.error("No --dir");
@@ -21,6 +46,8 @@ if (!args.port) {
     console.error("No --port");
     process.exit(1);
 }
+
+password = args.password;
 
 if (args.watch) {
     fs.watch(__dirname, ev => {
@@ -40,7 +67,7 @@ function linksHTML(response, filePath)
         }
 
         const links = data.split("\n").filter(x => x.startsWith("http")).map(x => {
-            return `    <p><a href="${x}">${x}</a></p>`;
+            return `    <p><a href="${pw(x)}">${x}</a></p>`;
         }).join("\n");
 
         response.writeHead(200);
@@ -84,11 +111,11 @@ function imageHTML(response, filepath)
 &nbsp;
      </p>
      <p>
-       &nbsp;&nbsp;&nbsp;&nbsp;<a href="${filepath}?prev">Previous</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${filepath}?next">Next</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${path.dirname(filepath)}">Dir</a>
+       &nbsp;&nbsp;&nbsp;&nbsp;<a href="${pw(filepath, 'prev')}">Previous</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${pw(filepath, 'next')}">Next</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${pw(path.dirname(filepath))}">Dir</a>
      </p>
-     <a href="${filepath}?next">
+     <a href="${pw(filepath, 'next')}">
        <div class="imgbox">
-         <img class="center-fit" src="${filepath}?data"/>
+         <img class="center-fit" src="${pw(filepath, 'data')}"/>
        </div>
      </a>
   </body>
@@ -98,7 +125,7 @@ function imageHTML(response, filepath)
     });
 }
 
-function dirHTML(url, response, dir)
+function dirHTML(url, response, dir, query)
 {
     let str = `
 <html>
@@ -117,31 +144,31 @@ img {
   </head>
   <body>
 `;
-    if (dir.root) {
-        str += `<p><a href="${path.join(dir.relative, 'bookmark.url')}">Bookmarks</a></p>\n`;
+    if (dir.bookmarks) {
+        str += `<p><a href="${pw(path.join(dir.relative, 'bookmark.url'))}">Bookmarks</a></p>\n`;
     }
-    dir.dirs.forEach(dirpath => {
-        str += `<p><a href="${path.join(dir.relative, dirpath)}">${dirpath}</a></p>
-`;
-    });
     // console.log(dir, dir.relative);
     let images;
-    if (url.query === "z") {
+    if (query.indexOf("z") !== -1) {
         images = [];
         while (dir.images.length) {
             images.push(dir.images.splice(Math.floor(Math.random() * dir.images.length), 1)[0]);
         }
         if (images.length) {
-            str += `<p><a href="${dir.relative}">Unshuffle</a></p>\n`;
+            str += `<p><a href="${pw(dir.relative)}">Unshuffle</a></p>\n`;
         }
     } else {
         images = dir.images;
         if (images.length) {
-            str += `<p><a href="${dir.relative}?z">Shuffle</a></p>\n`;
+            str += `<p><a href="${pw(dir.relative, 'z')}">Shuffle</a></p>\n`;
         }
     }
+    dir.dirs.forEach(dirpath => {
+        str += `<p><a href="${pw(path.join(dir.relative, dirpath))}">${dirpath}</a></p>
+`;
+    });
     images.forEach(img => {
-        str += `<p><a href="${path.join(dir.relative, img)}"><img src="${path.join(dir.relative, img)}?data"></img></a></p>\n`;
+        str += `<p><a href="${pw(path.join(dir.relative, img))}"><img src="${pw(path.join(dir.relative, img), 'data')}"></img></a></p>\n`;
     });
     str += "</body>\n</html>";
 
@@ -163,27 +190,38 @@ http.createServer(function(request, response) {
     const u = url.parse(request.url);
     u.pathname = decodeURIComponent(u.pathname);
     // console.log(u.pathname);
-    const filePath = path.join(args.dir, u.pathname);
     // console.log(u);
-    let statVal = stat(filePath);
-    if (!statVal) {
-        response.writeHead(301, { Location: "/" });
+    const query = String(u.query).split("&");
+    // console.log(query, `pw=${password}`, query.indexOf(`pw=${password}`));
+    if (password && query.indexOf(`pw=${password}`) === -1) {
+        response.writeHead(403);
         response.end();
         return;
     }
+
+    const filePath = path.join(args.dir, u.pathname);
+    let statVal = stat(filePath);
+    // console.log(filePath, statVal);
+    if (!statVal) {
+        response.writeHead(301, { Location: pw("/") });
+        response.end();
+        return;
+    }
+
+    // console.log(u.query);
 
     if (statVal.isDirectory()) {
         const d = new Dir(args.dir, filePath);
         // console.log(d);
         // imagesInDir(filePath);
-        dirHTML(u, response, d);
+        dirHTML(u, response, d, query);
         return;
     }
 
     if (statVal.isFile() && isImage(filePath)) {
         // console.log("got here", u.pathname, u.query);
         const d = new Dir(args.dir, path.dirname(filePath));
-        if (u.query === "data") {
+        if (query.indexOf("data") !== -1) {
             fs.readFile(filePath, "binary", (err, file) => {
                 if (err) {
                     response.writeHead(404, {"Content-Type": "text/plain"});
@@ -199,13 +237,13 @@ http.createServer(function(request, response) {
             return;
         }
 
-        if (u.query === "next" || u.query === "prev") {
+        if (query.indexOf("next") !== -1 || query.indexOf("prev") !== -1) {
             let idx = d.images.indexOf(path.basename(u.pathname));
             if (idx === -1) {
                 imageHTML(response, u.pathname);
                 return;
             }
-            if (u.query === "next") {
+            if (query.indexOf("next") !== -1) {
                 if (++idx === d.images.length) {
                     idx = 0;
                 }
@@ -215,7 +253,7 @@ http.createServer(function(request, response) {
                 }
             }
 
-            response.writeHead(301, { Location: path.join(d.relative, d.images[idx]) });
+            response.writeHead(301, { Location: `${pw(path.join(d.relative, d.images[idx]))}` });
             response.end();
             return;
         }
