@@ -334,20 +334,20 @@ ${password ? authCheckScript : ''}
 }
 
 .grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(${thumbSize}px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   padding: 10px;
 }
 
 .grid a {
   display: block;
+  flex: 0 0 auto;
 }
 
 .grid img {
-  width: 100%;
   height: ${thumbSize}px;
-  object-fit: contain;
+  width: auto;
 }
     </style>
   </head>
