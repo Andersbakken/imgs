@@ -80,16 +80,37 @@ button:hover {
     </style>
   </head>
   <body>
-    <form method="POST" action="/__login">
-      <input type="password" name="password" placeholder="Password" autofocus>
+    <form id="loginForm">
+      <input type="password" name="password" id="password" placeholder="Password" autofocus>
       <button type="submit">Login</button>
     </form>
+    <script>
+document.getElementById('loginForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    var pw = document.getElementById('password').value;
+    sessionStorage.setItem('auth', pw);
+    document.cookie = 'auth=' + encodeURIComponent(pw) + '; path=/';
+    window.location.href = '/';
+});
+    </script>
   </body>
 </html>`;
     response.writeHead(200, {"Content-Type": "text/html"});
     response.write(html);
     response.end();
 }
+
+const authCheckScript = `
+<script>
+(function() {
+    var stored = sessionStorage.getItem('auth');
+    if (!stored) {
+        document.cookie = 'auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+        window.location.href = '/__login';
+    }
+})();
+</script>`;
+
 
 if (!args.dir) {
     console.error("No --dir");
@@ -104,7 +125,7 @@ if (!args.port) {
     process.exit(1);
 }
 
-password = args.password;
+password = args.password ? String(args.password) : undefined;
 
 if (args.watch) {
     fs.watch(__dirname, ev => {
@@ -130,6 +151,7 @@ function linksHTML(response, filePath)
         response.writeHead(200);
         const payload = `<html>
   <head>
+${password ? authCheckScript : ''}
   </head>
   <body>
 ${links}
@@ -146,6 +168,7 @@ function imageHTML(response, filepath)
         const str = `
 <html>
   <head title="${filepath}">
+${password ? authCheckScript : ''}
     <style>
 * {
     font-size: 25px;
@@ -187,6 +210,7 @@ function dirHTML(url, response, dir, query)
     let str = `
 <html>
   <head title="${dir.relative}">
+${password ? authCheckScript : ''}
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
 * {
@@ -248,6 +272,12 @@ http.createServer(function(request, response) {
     const query = String(u.query).split("&");
     const cookies = parseCookies(request.headers.cookie);
 
+    // Serve login page for GET requests to /__login
+    if (request.method === 'GET' && u.pathname === '/__login') {
+        loginHTML(response);
+        return;
+    }
+
     // Handle login POST
     if (request.method === 'POST' && u.pathname === '/__login') {
         let body = '';
@@ -257,7 +287,7 @@ http.createServer(function(request, response) {
             const submittedPassword = params.get('password');
             if (submittedPassword === password) {
                 response.writeHead(302, {
-                    'Set-Cookie': `auth=${encodeURIComponent(submittedPassword)}; Path=/; HttpOnly`,
+                    'Set-Cookie': `auth=${encodeURIComponent(submittedPassword)}; Path=/`,
                     'Location': '/'
                 });
                 response.end();
