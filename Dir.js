@@ -1,5 +1,5 @@
 const fs = require("fs");
-const isImage = require("./isImage");
+const { isMedia } = require("./media");
 
 class Dir
 {
@@ -26,7 +26,7 @@ class Dir
             fs.readdirSync(path, { withFileTypes: true }).forEach(entry => {
                 // console.log(entry);
                 if (entry.isFile()) {
-                    if (isImage(entry.name)) {
+                    if (isMedia(entry.name)) {
                         this.images.push(entry.name);
                     } else if (this.root && entry.name.endsWith(".url")) {
                         this.bookmarks = true;

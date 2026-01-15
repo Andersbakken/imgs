@@ -7,7 +7,7 @@ const path = require("path");
 const fs = require("fs");
 const imageSize = require("image-size");
 const Dir = require("./Dir");
-const isImage = require("./isImage");
+const { isImage, isVideo, isMedia } = require("./media");
 let password;
 
 function link(str, query)
@@ -155,7 +155,7 @@ password = args.password ? String(args.password) : undefined;
 const sourceFiles = [
     path.join(__dirname, 'imgs'),
     path.join(__dirname, 'Dir.js'),
-    path.join(__dirname, 'isImage.js')
+    path.join(__dirname, 'media.js')
 ];
 
 sourceFiles.forEach(file => {
@@ -208,8 +208,19 @@ ${links}
     });
 }
 
+function mediaTag(filepath, className, withControls)
+{
+    const src = link(filepath, 'data');
+    if (isVideo(filepath)) {
+        const controls = withControls ? ' controls muted' : '';
+        return `<video class="${className}" src="${src}"${controls} muted playsinline preload="metadata"></video>`;
+    }
+    return `<img class="${className}" src="${src}"/>`;
+}
+
 function imageHTML(response, filepath, dir, cookies, setCookieHeader)
 {
+    const isVid = isVideo(filepath);
     const tripleView = cookies.tripleview !== '0';
     const toggleLink = tripleView ? link(filepath, 'view1') : link(filepath, 'view3');
     const toggleText = tripleView ? '1' : '3';
@@ -237,19 +248,26 @@ function imageHTML(response, filepath, dir, cookies, setCookieHeader)
     if (tripleView && prevImg && nextImg) {
         imagesHtml = `
        <a href="${link(filepath, 'prev')}"><div class="imgbox">
-         <img class="center-fit" src="${link(prevImg, 'data')}"/>
+         ${mediaTag(prevImg, 'center-fit', false)}
        </div></a>
-       <a href="${link(filepath, 'next')}"><div class="imgbox current">
-         <img class="center-fit" src="${link(filepath, 'data')}"/>
-       </div></a>
+       <div class="imgbox current">
+         ${mediaTag(filepath, 'center-fit', isVid)}
+       </div>
        <a href="${link(filepath, 'next')}"><div class="imgbox">
-         <img class="center-fit" src="${link(nextImg, 'data')}"/>
+         ${mediaTag(nextImg, 'center-fit', false)}
        </div></a>`;
     } else {
-        imagesHtml = `
+        if (isVid) {
+            imagesHtml = `
+       <div class="imgbox">
+         ${mediaTag(filepath, 'center-fit', true)}
+       </div>`;
+        } else {
+            imagesHtml = `
        <a href="${link(filepath, 'next')}"><div class="imgbox">
-         <img class="center-fit" src="${link(filepath, 'data')}"/>
+         ${mediaTag(filepath, 'center-fit', false)}
        </div></a>`;
+        }
     }
 
     const str = `
@@ -345,7 +363,7 @@ ${password ? authCheckScript : ''}
   flex: 0 0 auto;
 }
 
-.grid img {
+.grid img, .grid video {
   height: ${thumbSize}px;
   width: auto;
 }
@@ -388,7 +406,12 @@ ${password ? authCheckScript : ''}
     if (images.length) {
         str += `<div class="grid">\n`;
         images.forEach(img => {
-            str += `<a href="${link(path.join(dir.relative, img))}"><img src="${link(path.join(dir.relative, img), 'data')}"></a>\n`;
+            const mediaPath = path.join(dir.relative, img);
+            if (isVideo(img)) {
+                str += `<a href="${link(mediaPath)}"><video src="${link(mediaPath, 'data')}" muted preload="metadata"></video></a>\n`;
+            } else {
+                str += `<a href="${link(mediaPath)}"><img src="${link(mediaPath, 'data')}"></a>\n`;
+            }
         });
         str += `</div>\n`;
     }
@@ -499,7 +522,7 @@ http.createServer(function(request, response) {
         return;
     }
 
-    if (statVal.isFile() && isImage(filePath)) {
+    if (statVal.isFile() && isMedia(filePath)) {
         const d = new Dir(args.dir, path.dirname(filePath));
 
         if (query.indexOf("data") !== -1) {
