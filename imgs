@@ -430,17 +430,21 @@ ${password ? authCheckScript : ''}
   overflow: hidden;
   width: 100%;
   box-sizing: border-box;
-  position: relative;
+  text-align: center;
 }
 
-.grid .video-thumb .name span {
+.grid .video-thumb .name.scroll {
+  text-align: left;
+}
+
+.grid .video-thumb .name.scroll span {
   display: inline-block;
-  animation: marquee 6s linear infinite;
+  animation: marquee 4s linear infinite;
 }
 
 @keyframes marquee {
-  0% { transform: translateX(100%); }
-  100% { transform: translateX(-100%); }
+  0%, 10% { transform: translateX(0); }
+  90%, 100% { transform: translateX(calc(-100% - 10px)); }
 }
     </style>
   </head>
@@ -487,7 +491,9 @@ ${password ? authCheckScript : ''}
             const mediaPath = path.join(dir.relative, img);
             log('dirHTML: adding media item:', mediaPath, 'isVideo:', isVideo(img));
             if (isVideo(img)) {
-                str += `<a href="${link(mediaPath)}" class="video-thumb"><span class="icon">&#127910;</span><span class="name"><span>${img}</span></span></a>\n`;
+                const needsScroll = img.length > 15;
+                const nameClass = needsScroll ? 'name scroll' : 'name';
+                str += `<a href="${link(mediaPath)}" class="video-thumb"><span class="icon">&#127910;</span><span class="${nameClass}"><span>${img}</span></span></a>\n`;
             } else {
                 str += `<a href="${link(mediaPath)}"><img src="${link(mediaPath, 'data')}"></a>\n`;
             }
