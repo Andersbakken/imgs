@@ -443,10 +443,8 @@ ${password ? authCheckScript : ''}
 }
 
 @keyframes marquee {
-  0%, 15% { transform: translateX(0); }
-  42% { transform: translateX(-100%); }
-  42.01% { transform: translateX(100%); }
-  70%, 100% { transform: translateX(0); }
+  0% { transform: translateX(100%); }
+  100% { transform: translateX(-100%); }
 }
     </style>
   </head>
@@ -493,7 +491,9 @@ ${password ? authCheckScript : ''}
             const mediaPath = path.join(dir.relative, img);
             log('dirHTML: adding media item:', mediaPath, 'isVideo:', isVideo(img));
             if (isVideo(img)) {
-                const needsScroll = img.length > 15;
+                // Estimate chars that fit: thumb width (1.5 * thumbSize) / ~7px per char
+                const maxChars = Math.floor((thumbSize * 1.5) / 7);
+                const needsScroll = img.length > maxChars;
                 const nameClass = needsScroll ? 'name scroll' : 'name';
                 str += `<a href="${link(mediaPath)}" class="video-thumb"><span class="icon">&#127910;</span><span class="${nameClass}"><span>${img}</span></span></a>\n`;
             } else {
