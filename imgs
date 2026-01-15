@@ -330,6 +330,7 @@ ${imagesHtml}
 
 function dirHTML(url, response, dir, query, cookies, setCookieHeader)
 {
+    log('dirHTML called for:', dir.relative);
     const thumbSize = cookies.thumbsize ? parseInt(cookies.thumbsize, 10) : 100;
     let str = `
 <html>
@@ -388,6 +389,8 @@ ${password ? authCheckScript : ''}
     }
 
     let images = dir.images;
+    log('dirHTML: dir.images has', dir.images.length, 'items');
+    log('dirHTML: dir.relative =', dir.relative);
     const shuffleSeed = cookies.shuffle ? parseInt(cookies.shuffle, 10) : null;
 
     // Build controls bar: - on left, shuffle in middle, + on right
@@ -415,10 +418,12 @@ ${password ? authCheckScript : ''}
         str += `<p><a href="${link(path.join(dir.relative, dirpath))}">${dirpath}</a></p>
 `;
     });
+    log('dirHTML: rendering', images.length, 'media items');
     if (images.length) {
         str += `<div class="grid">\n`;
         images.forEach(img => {
             const mediaPath = path.join(dir.relative, img);
+            log('dirHTML: adding media item:', mediaPath, 'isVideo:', isVideo(img));
             if (isVideo(img)) {
                 str += `<a href="${link(mediaPath)}"><video src="${link(mediaPath, 'data')}" muted preload="metadata"></video></a>\n`;
             } else {
