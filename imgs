@@ -444,7 +444,9 @@ ${password ? authCheckScript : ''}
 
 @keyframes marquee {
   0%, 10% { transform: translateX(0); }
-  90%, 100% { transform: translateX(calc(-100% - 10px)); }
+  45% { transform: translateX(calc(-100% - 10px)); }
+  46% { transform: translateX(100%); }
+  55%, 100% { transform: translateX(0); }
 }
     </style>
   </head>
