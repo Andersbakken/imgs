@@ -22,6 +22,26 @@ function link(str, query)
     return str;
 }
 
+// Seeded random number generator for consistent shuffling
+function seededRandom(seed)
+{
+    return function() {
+        seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+        return seed / 0x7fffffff;
+    };
+}
+
+function shuffleWithSeed(array, seed)
+{
+    const result = [...array];
+    const random = seededRandom(seed);
+    for (let i = result.length - 1; i > 0; i--) {
+        const j = Math.floor(random() * (i + 1));
+        [result[i], result[j]] = [result[j], result[i]];
+    }
+    return result;
+}
+
 function parseCookies(cookieHeader)
 {
     const cookies = {};
@@ -210,7 +230,7 @@ html, body {
     });
 }
 
-function dirHTML(url, response, dir, query)
+function dirHTML(url, response, dir, query, cookies, setCookieHeader)
 {
     let str = `
 <html>
@@ -233,22 +253,21 @@ img {
     if (dir.bookmarks) {
         str += `<p><a href="${link(path.join(dir.relative, 'bookmark.url'))}">Bookmarks</a></p>\n`;
     }
-    // console.log(dir, dir.relative);
-    let images;
-    if (query.indexOf("z") !== -1) {
-        images = [];
-        while (dir.images.length) {
-            images.push(dir.images.splice(Math.floor(Math.random() * dir.images.length), 1)[0]);
-        }
+
+    let images = dir.images;
+    const shuffleSeed = cookies.shuffle ? parseInt(cookies.shuffle, 10) : null;
+
+    if (shuffleSeed) {
+        images = shuffleWithSeed(dir.images, shuffleSeed);
         if (images.length) {
-            str += `<p><a href="${link(dir.relative)}">Unshuffle</a></p>\n`;
+            str += `<p><a href="${link(dir.relative, 'unshuffle')}">Unshuffle</a> | <a href="${link(dir.relative, 'shuffle')}">Reshuffle</a></p>\n`;
         }
     } else {
-        images = dir.images;
         if (images.length) {
-            str += `<p><a href="${link(dir.relative, 'z')}">Shuffle</a></p>\n`;
+            str += `<p><a href="${link(dir.relative, 'shuffle')}">Shuffle</a></p>\n`;
         }
     }
+
     dir.dirs.forEach(dirpath => {
         str += `<p><a href="${link(path.join(dir.relative, dirpath))}">${dirpath}</a></p>
 `;
@@ -258,6 +277,11 @@ img {
     });
     str += "</body>\n</html>";
 
+    const headers = {"Content-Type": "text/html"};
+    if (setCookieHeader) {
+        headers["Set-Cookie"] = setCookieHeader;
+    }
+    response.writeHead(200, headers);
     response.write(str);
     response.end();
 }
@@ -325,9 +349,21 @@ http.createServer(function(request, response) {
 
     if (statVal.isDirectory()) {
         const d = new Dir(args.dir, filePath);
-        // console.log(d);
-        // imagesInDir(filePath);
-        dirHTML(u, response, d, query);
+
+        // Handle shuffle toggle
+        if (query.indexOf("shuffle") !== -1) {
+            const seed = Date.now();
+            const setCookie = `shuffle=${seed}; Path=/`;
+            dirHTML(u, response, d, query, {...cookies, shuffle: String(seed)}, setCookie);
+            return;
+        }
+        if (query.indexOf("unshuffle") !== -1) {
+            const setCookie = `shuffle=; Path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+            dirHTML(u, response, d, query, {...cookies, shuffle: null}, setCookie);
+            return;
+        }
+
+        dirHTML(u, response, d, query, cookies, null);
         return;
     }
 
@@ -351,22 +387,26 @@ http.createServer(function(request, response) {
         }
 
         if (query.indexOf("next") !== -1 || query.indexOf("prev") !== -1) {
-            let idx = d.images.indexOf(path.basename(u.pathname));
+            // Use shuffled order if shuffle is active
+            const shuffleSeed = cookies.shuffle ? parseInt(cookies.shuffle, 10) : null;
+            const images = shuffleSeed ? shuffleWithSeed(d.images, shuffleSeed) : d.images;
+
+            let idx = images.indexOf(path.basename(u.pathname));
             if (idx === -1) {
                 imageHTML(response, u.pathname);
                 return;
             }
             if (query.indexOf("next") !== -1) {
-                if (++idx === d.images.length) {
+                if (++idx === images.length) {
                     idx = 0;
                 }
             } else {
                 if (idx-- === 0) {
-                    idx = d.images.length - 1;
+                    idx = images.length - 1;
                 }
             }
 
-            response.writeHead(301, { Location: `${link(path.join(d.relative, d.images[idx]))}` });
+            response.writeHead(301, { Location: `${link(path.join(d.relative, images[idx]))}` });
             response.end();
             return;
         }
