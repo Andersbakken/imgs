@@ -10,28 +10,85 @@ const Dir = require("./Dir");
 const isImage = require("./isImage");
 let password;
 
-function pw(str, query)
+function link(str, query)
 {
-    if (!password) {
-        if (query) {
-            if (str.indexOf("?") !== -1) {
-                str += "&" + query;
-            } else {
-                str += "?" + query;
-            }
-        }
-        return str;
-    }
-
-    if (str.indexOf("?") !== -1) {
-        str += "&pw=" + password;
-    } else {
-        str += "?pw=" + password;
-    }
     if (query) {
-        str += "&" + query;
+        if (str.indexOf("?") !== -1) {
+            str += "&" + query;
+        } else {
+            str += "?" + query;
+        }
     }
     return str;
+}
+
+function parseCookies(cookieHeader)
+{
+    const cookies = {};
+    if (!cookieHeader) return cookies;
+    cookieHeader.split(';').forEach(cookie => {
+        const parts = cookie.split('=');
+        const name = parts[0].trim();
+        const value = parts.slice(1).join('=').trim();
+        if (name) cookies[name] = value;
+    });
+    return cookies;
+}
+
+function loginHTML(response)
+{
+    const html = `
+<html>
+  <head>
+    <title>Login</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+body {
+    font-family: sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+    background: #f0f0f0;
+}
+form {
+    background: white;
+    padding: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+input[type="password"] {
+    font-size: 1rem;
+    padding: 0.5rem;
+    margin-right: 0.5rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+button {
+    font-size: 1rem;
+    padding: 0.5rem 1rem;
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+button:hover {
+    background: #0056b3;
+}
+    </style>
+  </head>
+  <body>
+    <form method="POST" action="/__login">
+      <input type="password" name="password" placeholder="Password" autofocus>
+      <button type="submit">Login</button>
+    </form>
+  </body>
+</html>`;
+    response.writeHead(200, {"Content-Type": "text/html"});
+    response.write(html);
+    response.end();
 }
 
 if (!args.dir) {
@@ -67,7 +124,7 @@ function linksHTML(response, filePath)
         }
 
         const links = data.split("\n").filter(x => x.startsWith("http")).map(x => {
-            return `    <p><a href="${pw(x)}">${x}</a></p>`;
+            return `    <p><a href="${link(x)}">${x}</a></p>`;
         }).join("\n");
 
         response.writeHead(200);
@@ -111,11 +168,11 @@ function imageHTML(response, filepath)
 &nbsp;
      </p>
      <p>
-       &nbsp;&nbsp;&nbsp;&nbsp;<a href="${pw(filepath, 'prev')}">Previous</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${pw(filepath, 'next')}">Next</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${pw(path.dirname(filepath))}">Dir</a>
+       &nbsp;&nbsp;&nbsp;&nbsp;<a href="${link(filepath, 'prev')}">Previous</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${link(filepath, 'next')}">Next</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${link(path.dirname(filepath))}">Dir</a>
      </p>
-     <a href="${pw(filepath, 'next')}">
+     <a href="${link(filepath, 'next')}">
        <div class="imgbox">
-         <img class="center-fit" src="${pw(filepath, 'data')}"/>
+         <img class="center-fit" src="${link(filepath, 'data')}"/>
        </div>
      </a>
   </body>
@@ -145,7 +202,7 @@ img {
   <body>
 `;
     if (dir.bookmarks) {
-        str += `<p><a href="${pw(path.join(dir.relative, 'bookmark.url'))}">Bookmarks</a></p>\n`;
+        str += `<p><a href="${link(path.join(dir.relative, 'bookmark.url'))}">Bookmarks</a></p>\n`;
     }
     // console.log(dir, dir.relative);
     let images;
@@ -155,20 +212,20 @@ img {
             images.push(dir.images.splice(Math.floor(Math.random() * dir.images.length), 1)[0]);
         }
         if (images.length) {
-            str += `<p><a href="${pw(dir.relative)}">Unshuffle</a></p>\n`;
+            str += `<p><a href="${link(dir.relative)}">Unshuffle</a></p>\n`;
         }
     } else {
         images = dir.images;
         if (images.length) {
-            str += `<p><a href="${pw(dir.relative, 'z')}">Shuffle</a></p>\n`;
+            str += `<p><a href="${link(dir.relative, 'z')}">Shuffle</a></p>\n`;
         }
     }
     dir.dirs.forEach(dirpath => {
-        str += `<p><a href="${pw(path.join(dir.relative, dirpath))}">${dirpath}</a></p>
+        str += `<p><a href="${link(path.join(dir.relative, dirpath))}">${dirpath}</a></p>
 `;
     });
     images.forEach(img => {
-        str += `<p><a href="${pw(path.join(dir.relative, img))}"><img src="${pw(path.join(dir.relative, img), 'data')}"></img></a></p>\n`;
+        str += `<p><a href="${link(path.join(dir.relative, img))}"><img src="${link(path.join(dir.relative, img), 'data')}"></img></a></p>\n`;
     });
     str += "</body>\n</html>";
 
@@ -186,24 +243,45 @@ function stat(fp)
 }
 
 http.createServer(function(request, response) {
-    // console.log(request.url);
     const u = url.parse(request.url);
     u.pathname = decodeURIComponent(u.pathname);
-    // console.log(u.pathname);
-    // console.log(u);
     const query = String(u.query).split("&");
-    // console.log(query, `pw=${password}`, query.indexOf(`pw=${password}`));
-    if (password && query.indexOf(`pw=${password}`) === -1) {
-        response.writeHead(403);
-        response.end();
+    const cookies = parseCookies(request.headers.cookie);
+
+    // Handle login POST
+    if (request.method === 'POST' && u.pathname === '/__login') {
+        let body = '';
+        request.on('data', chunk => { body += chunk; });
+        request.on('end', () => {
+            const params = new URLSearchParams(body);
+            const submittedPassword = params.get('password');
+            if (submittedPassword === password) {
+                response.writeHead(302, {
+                    'Set-Cookie': `auth=${encodeURIComponent(submittedPassword)}; Path=/; HttpOnly`,
+                    'Location': '/'
+                });
+                response.end();
+            } else {
+                loginHTML(response);
+            }
+        });
         return;
+    }
+
+    // Check authentication via cookie
+    if (password) {
+        const authCookie = cookies.auth ? decodeURIComponent(cookies.auth) : null;
+        if (authCookie !== password) {
+            loginHTML(response);
+            return;
+        }
     }
 
     const filePath = path.join(args.dir, u.pathname);
     let statVal = stat(filePath);
     // console.log(filePath, statVal);
     if (!statVal) {
-        response.writeHead(301, { Location: pw("/") });
+        response.writeHead(301, { Location: link("/") });
         response.end();
         return;
     }
@@ -253,7 +331,7 @@ http.createServer(function(request, response) {
                 }
             }
 
-            response.writeHead(301, { Location: `${pw(path.join(d.relative, d.images[idx]))}` });
+            response.writeHead(301, { Location: `${link(path.join(d.relative, d.images[idx]))}` });
             response.end();
             return;
         }
