@@ -439,14 +439,14 @@ ${password ? authCheckScript : ''}
 
 .grid .video-thumb .name.scroll span {
   display: inline-block;
-  animation: marquee 4s linear infinite;
+  animation: marquee 6s linear infinite;
 }
 
 @keyframes marquee {
-  0%, 10% { transform: translateX(0); }
-  45% { transform: translateX(calc(-100% - 10px)); }
-  46% { transform: translateX(100%); }
-  55%, 100% { transform: translateX(0); }
+  0%, 15% { transform: translateX(0); }
+  42% { transform: translateX(-100%); }
+  42.01% { transform: translateX(100%); }
+  70%, 100% { transform: translateX(0); }
 }
     </style>
   </head>
