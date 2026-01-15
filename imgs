@@ -300,6 +300,7 @@ ${imagesHtml}
 
 function dirHTML(url, response, dir, query, cookies, setCookieHeader)
 {
+    const thumbSize = cookies.thumbsize ? parseInt(cookies.thumbsize, 10) : 100;
     let str = `
 <html>
   <head title="${dir.relative}">
@@ -312,7 +313,7 @@ ${password ? authCheckScript : ''}
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(${thumbSize}px, 1fr));
   gap: 10px;
   padding: 10px;
 }
@@ -323,7 +324,7 @@ ${password ? authCheckScript : ''}
 
 .grid img {
   width: 100%;
-  height: 100px;
+  height: ${thumbSize}px;
   object-fit: cover;
 }
     </style>
@@ -337,15 +338,21 @@ ${password ? authCheckScript : ''}
     let images = dir.images;
     const shuffleSeed = cookies.shuffle ? parseInt(cookies.shuffle, 10) : null;
 
+    // Build controls line
+    let controls = [];
+    controls.push(`<a href="${link(dir.relative, 'zoom-')}">-</a> <a href="${link(dir.relative, 'zoom+')}">+</a>`);
     if (shuffleSeed) {
         images = shuffleWithSeed(dir.images, shuffleSeed);
         if (images.length) {
-            str += `<p><a href="${link(dir.relative, 'unshuffle')}">Unshuffle</a> | <a href="${link(dir.relative, 'shuffle')}">Reshuffle</a></p>\n`;
+            controls.push(`<a href="${link(dir.relative, 'unshuffle')}">Unshuffle</a> | <a href="${link(dir.relative, 'shuffle')}">Reshuffle</a>`);
         }
     } else {
         if (images.length) {
-            str += `<p><a href="${link(dir.relative, 'shuffle')}">Shuffle</a></p>\n`;
+            controls.push(`<a href="${link(dir.relative, 'shuffle')}">Shuffle</a>`);
         }
+    }
+    if (controls.length) {
+        str += `<p>${controls.join(' &nbsp; ')}</p>\n`;
     }
 
     dir.dirs.forEach(dirpath => {
@@ -433,6 +440,21 @@ http.createServer(function(request, response) {
 
     if (statVal.isDirectory()) {
         const d = new Dir(args.dir, filePath);
+
+        // Handle zoom
+        const currentSize = cookies.thumbsize ? parseInt(cookies.thumbsize, 10) : 100;
+        if (query.indexOf("zoom+") !== -1) {
+            const newSize = Math.min(currentSize + 50, 500);
+            const setCookie = `thumbsize=${newSize}; Path=/`;
+            dirHTML(u, response, d, query, {...cookies, thumbsize: String(newSize)}, setCookie);
+            return;
+        }
+        if (query.indexOf("zoom-") !== -1) {
+            const newSize = Math.max(currentSize - 50, 50);
+            const setCookie = `thumbsize=${newSize}; Path=/`;
+            dirHTML(u, response, d, query, {...cookies, thumbsize: String(newSize)}, setCookie);
+            return;
+        }
 
         // Handle shuffle toggle
         if (query.indexOf("shuffle") !== -1) {
