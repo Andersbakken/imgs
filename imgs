@@ -311,6 +311,28 @@ ${password ? authCheckScript : ''}
   box-sizing: border-box;
 }
 
+.controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+}
+
+.controls a {
+  font-size: 2rem;
+  padding: 0.5rem 1rem;
+  text-decoration: none;
+}
+
+.controls .middle {
+  font-size: 1rem;
+}
+
+.controls .middle a {
+  font-size: 1rem;
+  padding: 0.25rem;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(${thumbSize}px, 1fr));
@@ -338,22 +360,23 @@ ${password ? authCheckScript : ''}
     let images = dir.images;
     const shuffleSeed = cookies.shuffle ? parseInt(cookies.shuffle, 10) : null;
 
-    // Build controls line
-    let controls = [];
-    controls.push(`<a href="${link(dir.relative, 'zoom-')}">-</a> <a href="${link(dir.relative, 'zoom+')}">+</a>`);
+    // Build controls bar: - on left, shuffle in middle, + on right
+    let middleControls = '';
     if (shuffleSeed) {
         images = shuffleWithSeed(dir.images, shuffleSeed);
         if (images.length) {
-            controls.push(`<a href="${link(dir.relative, 'unshuffle')}">Unshuffle</a> | <a href="${link(dir.relative, 'shuffle')}">Reshuffle</a>`);
+            middleControls = `<a href="${link(dir.relative, 'unshuffle')}">Unshuffle</a> | <a href="${link(dir.relative, 'shuffle')}">Reshuffle</a>`;
         }
     } else {
         if (images.length) {
-            controls.push(`<a href="${link(dir.relative, 'shuffle')}">Shuffle</a>`);
+            middleControls = `<a href="${link(dir.relative, 'shuffle')}">Shuffle</a>`;
         }
     }
-    if (controls.length) {
-        str += `<p>${controls.join(' &nbsp; ')}</p>\n`;
-    }
+    str += `<div class="controls">
+  <a href="${link(dir.relative, 'zoom-')}">-</a>
+  <span class="middle">${middleControls}</span>
+  <a href="${link(dir.relative, 'zoom+')}">+</a>
+</div>\n`;
 
     dir.dirs.forEach(dirpath => {
         str += `<p><a href="${link(path.join(dir.relative, dirpath))}">${dirpath}</a></p>
