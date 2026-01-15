@@ -347,7 +347,7 @@ ${password ? authCheckScript : ''}
 .grid img {
   width: 100%;
   height: ${thumbSize}px;
-  object-fit: cover;
+  object-fit: contain;
 }
     </style>
   </head>
