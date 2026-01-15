@@ -408,32 +408,40 @@ ${password ? authCheckScript : ''}
 
 .grid .video-thumb {
   height: ${thumbSize}px;
-  width: ${thumbSize}px;
+  width: ${Math.floor(thumbSize * 1.5)}px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   background: #333;
   color: #fff;
   text-decoration: none;
   font-size: 12px;
   overflow: hidden;
+  padding: 8px 0;
 }
 
 .grid .video-thumb .icon {
-  font-size: ${Math.floor(thumbSize * 0.4)}px;
+  font-size: ${Math.floor(thumbSize * 0.3)}px;
 }
 
 .grid .video-thumb .name {
-  max-width: 100%;
-  padding: 0 4px;
-  text-align: center;
-  word-break: break-all;
+  white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  width: 100%;
+  padding: 0 4px;
+  box-sizing: border-box;
+}
+
+.grid .video-thumb .name span {
+  display: inline-block;
+  padding-left: 100%;
+  animation: marquee 8s linear infinite;
+}
+
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-100%); }
 }
     </style>
   </head>
@@ -480,8 +488,7 @@ ${password ? authCheckScript : ''}
             const mediaPath = path.join(dir.relative, img);
             log('dirHTML: adding media item:', mediaPath, 'isVideo:', isVideo(img));
             if (isVideo(img)) {
-                const shortName = img.length > 20 ? img.substring(0, 17) + '...' : img;
-                str += `<a href="${link(mediaPath)}" class="video-thumb"><span class="icon">&#127910;</span><span class="name">${shortName}</span></a>\n`;
+                str += `<a href="${link(mediaPath)}" class="video-thumb"><span class="icon">&#127910;</span><span class="name"><span>${img}</span></span></a>\n`;
             } else {
                 str += `<a href="${link(mediaPath)}"><img src="${link(mediaPath, 'data')}"></a>\n`;
             }
