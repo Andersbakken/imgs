@@ -381,7 +381,7 @@ ${password ? authCheckScript : ''}
     // Build controls bar: - on left, shuffle in middle, + on right
     let middleControls = [];
     if (!dir.root) {
-        middleControls.push(`<a href="${link(path.dirname(dir.relative))}">..</a>`);
+        middleControls.push(`<a href="${link(path.dirname(dir.relative))}">parent dir</a>`);
     }
     if (shuffleSeed) {
         images = shuffleWithSeed(dir.images, shuffleSeed);

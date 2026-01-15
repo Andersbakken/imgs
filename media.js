@@ -22,6 +22,14 @@ function isVideo(fp)
     case ".m4v":
     case ".mkv":
     case ".avi":
+    case ".mpg":
+    case ".mpeg":
+    case ".wmv":
+    case ".flv":
+    case ".rm":
+    case ".rmvb":
+    case ".3gp":
+    case ".ogv":
         return true;
     }
     return false;
