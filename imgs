@@ -150,6 +150,18 @@ if (!args.port) {
 }
 
 password = args.password ? String(args.password) : undefined;
+const verbose = args.verbose || false;
+
+function log(...logArgs) {
+    if (verbose) {
+        console.log('[verbose]', ...logArgs);
+    }
+}
+
+if (verbose) {
+    console.log('Verbose mode enabled');
+    console.log('Serving directory:', args.dir);
+}
 
 // Watch source files for changes - exit so systemd can restart
 const sourceFiles = [
@@ -441,6 +453,8 @@ http.createServer(function(request, response) {
     const query = String(u.query).split("&");
     const cookies = parseCookies(request.headers.cookie);
 
+    log('Request:', request.method, u.pathname, 'query:', u.query);
+
     // Serve login page for GET requests to /__login
     if (request.method === 'GET' && u.pathname === '/__login') {
         loginHTML(response);
@@ -488,7 +502,7 @@ http.createServer(function(request, response) {
     // console.log(u.query);
 
     if (statVal.isDirectory()) {
-        const d = new Dir(args.dir, filePath);
+        const d = new Dir(args.dir, filePath, log);
 
         // Handle zoom
         const currentSize = cookies.thumbsize ? parseInt(cookies.thumbsize, 10) : 100;
@@ -523,7 +537,7 @@ http.createServer(function(request, response) {
     }
 
     if (statVal.isFile() && isMedia(filePath)) {
-        const d = new Dir(args.dir, path.dirname(filePath));
+        const d = new Dir(args.dir, path.dirname(filePath), log);
 
         if (query.indexOf("data") !== -1) {
             fs.readFile(filePath, "binary", (err, file) => {

@@ -3,8 +3,9 @@ const { isMedia } = require("./media");
 
 class Dir
 {
-    constructor(root, path)
+    constructor(root, path, logFn)
     {
+        const log = logFn || (() => {});
         // console.log("CRAP", path);
         if (path[path.length - 1] !== "/") {
             path += "/";
@@ -21,23 +22,27 @@ class Dir
             this.root = true;
             this.relative = "/";
         }
-        // console.log("shit", root, path);
+        log('Scanning directory:', path);
         try {
-            fs.readdirSync(path, { withFileTypes: true }).forEach(entry => {
-                // console.log(entry);
+            const entries = fs.readdirSync(path, { withFileTypes: true });
+            log('Found', entries.length, 'entries');
+            entries.forEach(entry => {
                 if (entry.isFile()) {
-                    if (isMedia(entry.name)) {
+                    const media = isMedia(entry.name);
+                    log('  File:', entry.name, '- isMedia:', media);
+                    if (media) {
                         this.images.push(entry.name);
                     } else if (this.root && entry.name.endsWith(".url")) {
                         this.bookmarks = true;
                     }
                 } else if (entry.isDirectory()) {
-                    // console.log("got dir", entry.name);
+                    log('  Dir:', entry.name);
                     this.dirs.push(entry.name);
                 }
             });
+            log('Result:', this.images.length, 'media files,', this.dirs.length, 'dirs');
         } catch (err) {
-            console.error("Balls", err);
+            console.error("Error reading directory:", err);
         }
     }
 };
