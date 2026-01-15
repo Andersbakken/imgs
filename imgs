@@ -182,10 +182,51 @@ ${links}
     });
 }
 
-function imageHTML(response, filepath)
+function imageHTML(response, filepath, dir, cookies, setCookieHeader)
 {
-    imageSize(filepath, (err, dimensions) => {
-        const str = `
+    const tripleView = cookies.tripleview !== '0';
+    const toggleLink = tripleView ? link(filepath, 'view1') : link(filepath, 'view3');
+    const toggleText = tripleView ? '1' : '3';
+
+    const shuffleSeed = cookies.shuffle ? parseInt(cookies.shuffle, 10) : null;
+    const shuffleLinks = shuffleSeed
+        ? `<a href="${link(filepath, 'unshuffle')}">Unshuffle</a> | <a href="${link(filepath, 'shuffle')}">Reshuffle</a>`
+        : `<a href="${link(filepath, 'shuffle')}">Shuffle</a>`;
+
+    // Get prev/next images for triple view
+    const images = shuffleSeed ? shuffleWithSeed(dir.images, shuffleSeed) : dir.images;
+    const currentIdx = images.indexOf(path.basename(filepath));
+
+    let prevImg = null, nextImg = null;
+    if (currentIdx !== -1 && images.length > 1) {
+        const prevIdx = currentIdx === 0 ? images.length - 1 : currentIdx - 1;
+        const nextIdx = currentIdx === images.length - 1 ? 0 : currentIdx + 1;
+        prevImg = path.join(dir.relative, images[prevIdx]);
+        nextImg = path.join(dir.relative, images[nextIdx]);
+    }
+
+    const imgHeight = tripleView ? 'calc(33.33vh - 20px)' : 'calc(100vh - 60px)';
+
+    let imagesHtml;
+    if (tripleView && prevImg && nextImg) {
+        imagesHtml = `
+       <a href="${link(filepath, 'prev')}"><div class="imgbox">
+         <img class="center-fit" src="${link(prevImg, 'data')}"/>
+       </div></a>
+       <a href="${link(filepath, 'next')}"><div class="imgbox current">
+         <img class="center-fit" src="${link(filepath, 'data')}"/>
+       </div></a>
+       <a href="${link(filepath, 'next')}"><div class="imgbox">
+         <img class="center-fit" src="${link(nextImg, 'data')}"/>
+       </div></a>`;
+    } else {
+        imagesHtml = `
+       <a href="${link(filepath, 'next')}"><div class="imgbox">
+         <img class="center-fit" src="${link(filepath, 'data')}"/>
+       </div></a>`;
+    }
+
+    const str = `
 <html>
   <head title="${filepath}">
 ${password ? authCheckScript : ''}
@@ -202,7 +243,7 @@ html, body {
     display: flex;
     justify-content: center;
     align-items: center;
-    height: calc(100vh - 60px);
+    height: ${imgHeight};
 }
 .center-fit {
     width: 100%;
@@ -216,18 +257,19 @@ html, body {
 &nbsp;
      </p>
      <p>
-       &nbsp;&nbsp;&nbsp;&nbsp;<a href="${link(filepath, 'prev')}">Previous</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${link(filepath, 'next')}">Next</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${link(path.dirname(filepath))}">Dir</a>
+       &nbsp;&nbsp;&nbsp;&nbsp;<a href="${link(filepath, 'prev')}">Previous</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${link(filepath, 'next')}">Next</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${link(path.dirname(filepath))}">Dir</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${toggleLink}">${toggleText}</a>&nbsp;&nbsp;&nbsp;&nbsp;${shuffleLinks}
      </p>
-     <a href="${link(filepath, 'next')}">
-       <div class="imgbox">
-         <img class="center-fit" src="${link(filepath, 'data')}"/>
-       </div>
-     </a>
+${imagesHtml}
   </body>
 </html>`;
-        response.write(str);
-        response.end();
-    });
+
+    const headers = {"Content-Type": "text/html"};
+    if (setCookieHeader) {
+        headers["Set-Cookie"] = setCookieHeader;
+    }
+    response.writeHead(200, headers);
+    response.write(str);
+    response.end();
 }
 
 function dirHTML(url, response, dir, query, cookies, setCookieHeader)
@@ -368,8 +410,8 @@ http.createServer(function(request, response) {
     }
 
     if (statVal.isFile() && isImage(filePath)) {
-        // console.log("got here", u.pathname, u.query);
         const d = new Dir(args.dir, path.dirname(filePath));
+
         if (query.indexOf("data") !== -1) {
             fs.readFile(filePath, "binary", (err, file) => {
                 if (err) {
@@ -386,6 +428,31 @@ http.createServer(function(request, response) {
             return;
         }
 
+        // Handle view toggle
+        if (query.indexOf("view3") !== -1) {
+            const setCookie = `tripleview=; Path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+            imageHTML(response, u.pathname, d, {...cookies, tripleview: null}, setCookie);
+            return;
+        }
+        if (query.indexOf("view1") !== -1) {
+            const setCookie = `tripleview=0; Path=/`;
+            imageHTML(response, u.pathname, d, {...cookies, tripleview: '0'}, setCookie);
+            return;
+        }
+
+        // Handle shuffle toggle from image view
+        if (query.indexOf("shuffle") !== -1) {
+            const seed = Date.now();
+            const setCookie = `shuffle=${seed}; Path=/`;
+            imageHTML(response, u.pathname, d, {...cookies, shuffle: String(seed)}, setCookie);
+            return;
+        }
+        if (query.indexOf("unshuffle") !== -1) {
+            const setCookie = `shuffle=; Path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+            imageHTML(response, u.pathname, d, {...cookies, shuffle: null}, setCookie);
+            return;
+        }
+
         if (query.indexOf("next") !== -1 || query.indexOf("prev") !== -1) {
             // Use shuffled order if shuffle is active
             const shuffleSeed = cookies.shuffle ? parseInt(cookies.shuffle, 10) : null;
@@ -393,7 +460,7 @@ http.createServer(function(request, response) {
 
             let idx = images.indexOf(path.basename(u.pathname));
             if (idx === -1) {
-                imageHTML(response, u.pathname);
+                imageHTML(response, u.pathname, d, cookies, null);
                 return;
             }
             if (query.indexOf("next") !== -1) {
@@ -411,7 +478,7 @@ http.createServer(function(request, response) {
             return;
         }
 
-        imageHTML(response, u.pathname);
+        imageHTML(response, u.pathname, d, cookies, null);
         return;
     } else if (filePath.endsWith(".url")) {
         linksHTML(response, filePath);
