@@ -148,11 +148,33 @@ if (!args.port) {
 
 password = args.password ? String(args.password) : undefined;
 
-if (args.watch) {
-    fs.watch(__dirname, ev => {
-        console.log("got change", ev);
+// Watch source files for changes - exit so systemd can restart
+const sourceFiles = [
+    path.join(__dirname, 'imgs'),
+    path.join(__dirname, 'Dir.js'),
+    path.join(__dirname, 'isImage.js')
+];
+
+sourceFiles.forEach(file => {
+    fs.watch(file, (event, filename) => {
+        console.log(`Source file changed: ${file} (${event})`);
         process.exit(0);
     });
+});
+
+// Watch served directory recursively for changes (Linux Node 18.17+)
+// On older Node.js, recursive option is silently ignored on Linux
+// Since Dir reads fresh each request, there's no cache - this is just informational
+if (parseInt(process.versions.node.split('.')[0], 10) >= 18) {
+    try {
+        fs.watch(args.dir, { recursive: true }, (event, filename) => {
+            if (filename) {
+                console.log(`Content changed: ${filename} (${event})`);
+            }
+        });
+    } catch (err) {
+        console.error('Could not set up recursive watch on served directory:', err.message);
+    }
 }
 
 function linksHTML(response, filePath)
