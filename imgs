@@ -55,8 +55,9 @@ function parseCookies(cookieHeader)
     return cookies;
 }
 
-function loginHTML(response)
+function loginHTML(response, redirectTo)
 {
+    const redirect = redirectTo || '/';
     const html = `
 <html>
   <head>
@@ -102,15 +103,17 @@ button:hover {
   <body>
     <form id="loginForm">
       <input type="text" name="password" id="password" placeholder="Password" autofocus>
+      <input type="hidden" id="redirect" value="${redirect}">
       <button type="submit">Login</button>
     </form>
     <script>
 document.getElementById('loginForm').addEventListener('submit', function(e) {
     e.preventDefault();
     var pw = document.getElementById('password').value;
+    var redirect = document.getElementById('redirect').value;
     sessionStorage.setItem('auth', pw);
     document.cookie = 'auth=' + encodeURIComponent(pw) + '; path=/';
-    window.location.href = '/';
+    window.location.href = redirect;
 });
 document.getElementById('password').focus();
     </script>
@@ -412,7 +415,7 @@ http.createServer(function(request, response) {
     if (password) {
         const authCookie = cookies.auth ? decodeURIComponent(cookies.auth) : null;
         if (authCookie !== password) {
-            loginHTML(response);
+            loginHTML(response, request.url);
             return;
         }
     }
