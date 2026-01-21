@@ -5,10 +5,90 @@ const http = require("http");
 const url = require("url");
 const path = require("path");
 const fs = require("fs");
+const { execSync, exec } = require("child_process");
 const imageSize = require("image-size");
 const Dir = require("./Dir");
 const { isImage, isVideo, isMedia } = require("./media");
 let password;
+
+// Browser-compatible video codecs
+const PLAYABLE_VIDEO_CODECS = ['h264', 'vp8', 'vp9', 'av1', 'theora'];
+const PLAYABLE_AUDIO_CODECS = ['aac', 'mp3', 'opus', 'vorbis', 'flac'];
+
+// Cache for video info (codec detection)
+const videoInfoCache = {};
+
+function getVideoInfo(filePath) {
+    if (videoInfoCache[filePath]) {
+        return videoInfoCache[filePath];
+    }
+    try {
+        const result = execSync(
+            `ffprobe -v quiet -print_format json -show_streams "${filePath}"`,
+            { encoding: 'utf8', timeout: 5000 }
+        );
+        const info = JSON.parse(result);
+        const videoStream = info.streams?.find(s => s.codec_type === 'video');
+        const audioStream = info.streams?.find(s => s.codec_type === 'audio');
+        const videoInfo = {
+            videoCodec: videoStream?.codec_name?.toLowerCase(),
+            audioCodec: audioStream?.codec_name?.toLowerCase(),
+            playable: videoStream && PLAYABLE_VIDEO_CODECS.includes(videoStream.codec_name?.toLowerCase())
+        };
+        videoInfoCache[filePath] = videoInfo;
+        return videoInfo;
+    } catch (err) {
+        videoInfoCache[filePath] = { playable: false, error: err.message };
+        return videoInfoCache[filePath];
+    }
+}
+
+function getThumbDir(baseDir) {
+    return path.join(baseDir, '.thumbs');
+}
+
+function getThumbPath(baseDir, videoFile) {
+    const thumbDir = getThumbDir(baseDir);
+    const thumbName = path.basename(videoFile) + '.jpg';
+    return path.join(thumbDir, thumbName);
+}
+
+function ensureThumbDir(baseDir) {
+    const thumbDir = getThumbDir(baseDir);
+    if (!fs.existsSync(thumbDir)) {
+        fs.mkdirSync(thumbDir, { recursive: true });
+    }
+    return thumbDir;
+}
+
+function generateThumbnail(videoPath, thumbPath, callback) {
+    const thumbDir = path.dirname(thumbPath);
+    ensureThumbDir(thumbDir);
+
+    // Extract frame at 1 second or first frame
+    exec(
+        `ffmpeg -y -i "${videoPath}" -ss 00:00:01 -vframes 1 -vf "scale=200:-1" "${thumbPath}" 2>/dev/null || ffmpeg -y -i "${videoPath}" -vframes 1 -vf "scale=200:-1" "${thumbPath}" 2>/dev/null`,
+        { timeout: 10000 },
+        (err) => {
+            callback(err, thumbPath);
+        }
+    );
+}
+
+function getThumbnail(baseDir, videoFile, callback) {
+    const videoPath = path.join(baseDir, videoFile);
+    const thumbPath = getThumbPath(baseDir, videoFile);
+
+    // Check if thumbnail already exists
+    if (fs.existsSync(thumbPath)) {
+        callback(null, thumbPath);
+        return;
+    }
+
+    // Generate thumbnail
+    ensureThumbDir(baseDir);
+    generateThumbnail(videoPath, thumbPath, callback);
+}
 
 function getMimeType(filePath) {
     const ext = path.extname(filePath).toLowerCase();
@@ -408,28 +488,28 @@ ${password ? authCheckScript : ''}
 
 .grid .video-thumb {
   height: ${thumbSize}px;
-  width: ${Math.floor(thumbSize * 1.5)}px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: space-between;
-  background: #333;
-  color: #fff;
+  position: relative;
+  display: block;
   text-decoration: none;
-  font-size: 12px;
   overflow: hidden;
-  padding: 8px 0;
 }
 
-.grid .video-thumb .icon {
-  font-size: ${Math.floor(thumbSize * 0.3)}px;
+.grid .video-thumb img {
+  height: 100%;
+  width: auto;
 }
 
 .grid .video-thumb .name {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(0,0,0,0.7);
+  color: #fff;
+  font-size: 11px;
+  padding: 2px 4px;
   white-space: nowrap;
   overflow: hidden;
-  width: 100%;
-  box-sizing: border-box;
   text-align: center;
 }
 
@@ -440,6 +520,16 @@ ${password ? authCheckScript : ''}
 .grid .video-thumb .name.scroll span {
   display: inline-block;
   animation: marquee 6s linear infinite;
+}
+
+.grid .video-thumb .play-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: ${Math.floor(thumbSize * 0.3)}px;
+  color: rgba(255,255,255,0.8);
+  text-shadow: 0 0 10px rgba(0,0,0,0.5);
 }
 
 @keyframes marquee {
@@ -491,11 +581,34 @@ ${password ? authCheckScript : ''}
             const mediaPath = path.join(dir.relative, img);
             log('dirHTML: adding media item:', mediaPath, 'isVideo:', isVideo(img));
             if (isVideo(img)) {
-                // Estimate chars that fit: thumb width (1.5 * thumbSize) / ~7px per char
+                const fullPath = path.join(args.dir, mediaPath);
+                const videoInfo = getVideoInfo(fullPath);
+
+                // Skip unplayable videos
+                if (!videoInfo.playable) {
+                    log('Skipping unplayable video:', img, 'codec:', videoInfo.videoCodec);
+                    return;
+                }
+
+                // Check for thumbnail
+                const thumbPath = getThumbPath(path.dirname(fullPath), img);
+                const hasThumb = fs.existsSync(thumbPath);
+
+                // Estimate chars that fit
                 const maxChars = Math.floor((thumbSize * 1.5) / 7);
                 const needsScroll = img.length > maxChars;
                 const nameClass = needsScroll ? 'name scroll' : 'name';
-                str += `<a href="${link(mediaPath)}" class="video-thumb"><span class="icon">&#127910;</span><span class="${nameClass}"><span>${img}</span></span></a>\n`;
+
+                if (hasThumb) {
+                    const thumbUrl = link(path.join(dir.relative, '.thumbs', img + '.jpg'), 'data');
+                    str += `<a href="${link(mediaPath)}" class="video-thumb"><img src="${thumbUrl}"><span class="play-icon">&#9658;</span><span class="${nameClass}"><span>${img}</span></span></a>\n`;
+                } else {
+                    // Trigger thumbnail generation in background, show placeholder
+                    getThumbnail(path.dirname(fullPath), img, (err) => {
+                        if (err) log('Thumbnail generation failed for:', img, err.message);
+                    });
+                    str += `<a href="${link(mediaPath)}" class="video-thumb" style="background:#333;width:${Math.floor(thumbSize*0.75)}px"><span class="play-icon">&#9658;</span><span class="${nameClass}"><span>${img}</span></span></a>\n`;
+                }
             } else {
                 str += `<a href="${link(mediaPath)}"><img src="${link(mediaPath, 'data')}"></a>\n`;
             }

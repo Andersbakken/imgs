@@ -35,7 +35,7 @@ class Dir
                     } else if (this.root && entry.name.endsWith(".url")) {
                         this.bookmarks = true;
                     }
-                } else if (entry.isDirectory()) {
+                } else if (entry.isDirectory() && entry.name !== '.thumbs') {
                     log('  Dir:', entry.name);
                     this.dirs.push(entry.name);
                 }
