@@ -330,7 +330,7 @@ function mediaTag(filepath, className, withControls)
     const src = link(filepath, 'data');
     if (isVideo(filepath)) {
         const controls = withControls ? ' controls muted' : '';
-        return `<video class="${className}" src="${src}"${controls} muted playsinline preload="metadata"></video>`;
+        return `<video class="${className}" src="${src}"${controls} muted loop playsinline preload="metadata"></video>`;
     }
     return `<img class="${className}" src="${src}"/>`;
 }
