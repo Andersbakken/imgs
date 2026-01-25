@@ -288,7 +288,8 @@ sourceFiles.forEach(file => {
 if (parseInt(process.versions.node.split('.')[0], 10) >= 18) {
     try {
         fs.watch(args.dir, { recursive: true }, (event, filename) => {
-            if (filename) {
+            // Ignore noise: log files, thumbs directory, hidden files
+            if (filename && !filename.endsWith('.log') && !filename.includes('.thumbs') && !filename.startsWith('.')) {
                 console.log(`Content changed: ${filename} (${event})`);
             }
         });
