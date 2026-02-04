@@ -330,8 +330,8 @@ function mediaTag(filepath, className, withControls)
 {
     const src = link(filepath, 'data');
     if (isVideo(filepath)) {
-        const controls = withControls ? ' controls muted' : '';
-        return `<video class="${className}" src="${src}"${controls} muted loop playsinline preload="metadata"></video>`;
+        const controls = withControls ? ' controls' : '';
+        return `<video class="${className}" src="${src}"${controls} autoplay muted loop playsinline preload="metadata"></video>`;
     }
     return `<img class="${className}" src="${src}"/>`;
 }
@@ -350,14 +350,24 @@ function imageHTML(response, filepath, dir, cookies, setCookieHeader)
 
     // Get prev/next images for triple view
     const images = shuffleSeed ? shuffleWithSeed(dir.images, shuffleSeed) : dir.images;
-    const currentIdx = images.indexOf(path.basename(filepath));
+    const currentFilename = path.basename(filepath);
+    let currentIdx = images.indexOf(currentFilename);
+
+    // If current image not found (shouldn't happen), default to first
+    if (currentIdx === -1 && images.length > 0) {
+        currentIdx = 0;
+    }
 
     let prevImg = null, nextImg = null;
-    if (currentIdx !== -1 && images.length > 1) {
+    if (images.length > 1) {
         const prevIdx = currentIdx === 0 ? images.length - 1 : currentIdx - 1;
         const nextIdx = currentIdx === images.length - 1 ? 0 : currentIdx + 1;
         prevImg = path.join(dir.relative, images[prevIdx]);
         nextImg = path.join(dir.relative, images[nextIdx]);
+    } else if (images.length === 1) {
+        // Only one image - prev and next point to itself
+        prevImg = path.join(dir.relative, images[0]);
+        nextImg = path.join(dir.relative, images[0]);
     }
 
     const imgHeight = tripleView ? 'calc(33.33vh - 20px)' : 'calc(100vh - 60px)';
