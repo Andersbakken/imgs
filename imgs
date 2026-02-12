@@ -326,12 +326,12 @@ ${links}
     });
 }
 
-function mediaTag(filepath, className, withControls)
+function mediaTag(filepath, className, isCurrent)
 {
     const src = link(filepath, 'data');
     if (isVideo(filepath)) {
-        const controls = withControls ? ' controls' : '';
-        return `<video class="${className}" src="${src}"${controls} autoplay muted loop playsinline preload="metadata"></video>`;
+        const attrs = isCurrent ? ' controls autoplay' : ' preload="metadata"';
+        return `<video class="${className}" src="${src}"${attrs} muted loop playsinline></video>`;
     }
     return `<img class="${className}" src="${src}"/>`;
 }
@@ -358,6 +358,17 @@ function imageHTML(response, filepath, dir, cookies, setCookieHeader)
         currentIdx = 0;
     }
 
+    // If shuffled and current is at first or last, swap to middle so triple view works
+    if (shuffleSeed && images.length > 2) {
+        if (currentIdx === 0 || currentIdx === images.length - 1) {
+            const midIdx = Math.floor(images.length / 2);
+            const tmp = images[currentIdx];
+            images[currentIdx] = images[midIdx];
+            images[midIdx] = tmp;
+            currentIdx = midIdx;
+        }
+    }
+
     let prevImg = null, nextImg = null;
     if (images.length > 1) {
         const prevIdx = currentIdx === 0 ? images.length - 1 : currentIdx - 1;
@@ -365,7 +376,6 @@ function imageHTML(response, filepath, dir, cookies, setCookieHeader)
         prevImg = path.join(dir.relative, images[prevIdx]);
         nextImg = path.join(dir.relative, images[nextIdx]);
     } else if (images.length === 1) {
-        // Only one image - prev and next point to itself
         prevImg = path.join(dir.relative, images[0]);
         nextImg = path.join(dir.relative, images[0]);
     }
@@ -379,7 +389,7 @@ function imageHTML(response, filepath, dir, cookies, setCookieHeader)
          ${mediaTag(prevImg, 'center-fit', false)}
        </div></a>
        <div class="imgbox current">
-         ${mediaTag(filepath, 'center-fit', isVid)}
+         ${mediaTag(filepath, 'center-fit', true)}
        </div>
        <a href="${link(filepath, 'next')}"><div class="imgbox">
          ${mediaTag(nextImg, 'center-fit', false)}
