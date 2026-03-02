@@ -351,33 +351,15 @@ function imageHTML(response, filepath, dir, cookies, setCookieHeader)
     // Get prev/next images for triple view
     const images = shuffleSeed ? shuffleWithSeed(dir.images, shuffleSeed) : dir.images;
     const currentFilename = path.basename(filepath);
-    let currentIdx = images.indexOf(currentFilename);
-
-    // If current image not found (shouldn't happen), default to first
-    if (currentIdx === -1 && images.length > 0) {
-        currentIdx = 0;
-    }
-
-    // If shuffled and current is at first or last, swap to middle so triple view works
-    if (shuffleSeed && images.length > 2) {
-        if (currentIdx === 0 || currentIdx === images.length - 1) {
-            const midIdx = Math.floor(images.length / 2);
-            const tmp = images[currentIdx];
-            images[currentIdx] = images[midIdx];
-            images[midIdx] = tmp;
-            currentIdx = midIdx;
-        }
-    }
+    const currentIdx = images.indexOf(currentFilename);
 
     let prevImg = null, nextImg = null;
-    if (images.length > 1) {
-        const prevIdx = currentIdx === 0 ? images.length - 1 : currentIdx - 1;
-        const nextIdx = currentIdx === images.length - 1 ? 0 : currentIdx + 1;
+    if (currentIdx !== -1 && images.length > 1) {
+        // Wrap around: first image's prev is last, last image's next is first
+        const prevIdx = (currentIdx - 1 + images.length) % images.length;
+        const nextIdx = (currentIdx + 1) % images.length;
         prevImg = path.join(dir.relative, images[prevIdx]);
         nextImg = path.join(dir.relative, images[nextIdx]);
-    } else if (images.length === 1) {
-        prevImg = path.join(dir.relative, images[0]);
-        nextImg = path.join(dir.relative, images[0]);
     }
 
     const imgHeight = tripleView ? 'calc(33.33vh - 20px)' : 'calc(100vh - 60px)';
