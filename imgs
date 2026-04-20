@@ -127,6 +127,59 @@ function link(str, query)
     return str;
 }
 
+function orderCookieName(dirRelative)
+{
+    // Simple hash of directory path to make a short cookie name
+    let hash = 0;
+    for (let i = 0; i < dirRelative.length; i++) {
+        hash = ((hash << 5) - hash + dirRelative.charCodeAt(i)) | 0;
+    }
+    return 'order_' + Math.abs(hash).toString(36);
+}
+
+function getOrderedImages(dir, cookies)
+{
+    const cookieName = orderCookieName(dir.relative);
+    const orderCookie = cookies[cookieName];
+    if (orderCookie) {
+        try {
+            const ordered = JSON.parse(decodeURIComponent(orderCookie));
+            if (Array.isArray(ordered)) {
+                // Filter to only files that still exist, append any new files
+                const existing = new Set(dir.images);
+                const result = ordered.filter(f => existing.has(f));
+                const inResult = new Set(result);
+                dir.images.forEach(f => {
+                    if (!inResult.has(f)) {
+                        result.push(f);
+                    }
+                });
+                return result;
+            }
+        } catch (e) {
+            // Invalid cookie, ignore
+        }
+    }
+    return dir.images;
+}
+
+function swapImages(dir, cookies, currentFilename, direction)
+{
+    const images = getOrderedImages(dir, cookies);
+    const idx = images.indexOf(currentFilename);
+    if (idx === -1) {
+        return null;
+    }
+    const targetIdx = direction === 'up'
+        ? (idx - 1 + images.length) % images.length
+        : (idx + 1) % images.length;
+    const result = [...images];
+    [result[idx], result[targetIdx]] = [result[targetIdx], result[idx]];
+    const cookieName = orderCookieName(dir.relative);
+    const cookieValue = encodeURIComponent(JSON.stringify(result));
+    return { images: result, setCookie: `${cookieName}=${cookieValue}; Path=/` };
+}
+
 // Seeded random number generator for consistent shuffling
 function seededRandom(seed)
 {
@@ -349,7 +402,8 @@ function imageHTML(response, filepath, dir, cookies, setCookieHeader)
         : `<a href="${link(filepath, 'shuffle')}">Shuffle</a>`;
 
     // Get prev/next images for triple view
-    const images = shuffleSeed ? shuffleWithSeed(dir.images, shuffleSeed) : dir.images;
+    const orderedImages = getOrderedImages(dir, cookies);
+    const images = shuffleSeed ? shuffleWithSeed(orderedImages, shuffleSeed) : orderedImages;
     const currentFilename = path.basename(filepath);
     const currentIdx = images.indexOf(currentFilename);
 
@@ -421,7 +475,7 @@ html, body {
 &nbsp;
      </p>
      <p>
-       &nbsp;&nbsp;&nbsp;&nbsp;<a href="${link(filepath, 'prev')}">Previous</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${link(filepath, 'next')}">Next</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${link(path.dirname(filepath))}">Dir</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${toggleLink}">${toggleText}</a>&nbsp;&nbsp;&nbsp;&nbsp;${shuffleLinks}
+       &nbsp;&nbsp;&nbsp;&nbsp;<a href="${link(filepath, 'prev')}">Previous</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${link(filepath, 'next')}">Next</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${link(filepath, 'moveup')}">&uarr;</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${link(filepath, 'movedown')}">&darr;</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${link(path.dirname(filepath))}">Dir</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${toggleLink}">${toggleText}</a>&nbsp;&nbsp;&nbsp;&nbsp;${shuffleLinks}
      </p>
 ${imagesHtml}
   </body>
@@ -547,7 +601,7 @@ ${password ? authCheckScript : ''}
         str += `<p><a href="${link(path.join(dir.relative, 'bookmark.url'))}">Bookmarks</a></p>\n`;
     }
 
-    let images = dir.images;
+    let images = getOrderedImages(dir, cookies);
     log('dirHTML: dir.images has', dir.images.length, 'items');
     log('dirHTML: dir.relative =', dir.relative);
     const shuffleSeed = cookies.shuffle ? parseInt(cookies.shuffle, 10) : null;
@@ -558,7 +612,7 @@ ${password ? authCheckScript : ''}
         middleControls.push(`<a href="${link(path.dirname(dir.relative))}">parent dir</a>`);
     }
     if (shuffleSeed) {
-        images = shuffleWithSeed(dir.images, shuffleSeed);
+        images = shuffleWithSeed(images, shuffleSeed);
         if (images.length) {
             middleControls.push(`<a href="${link(dir.relative, 'unshuffle')}">Unshuffle</a> | <a href="${link(dir.relative, 'shuffle')}">Reshuffle</a>`);
         }
@@ -786,6 +840,19 @@ http.createServer(function(request, response) {
             return;
         }
 
+        // Handle move up/down
+        if (query.indexOf("moveup") !== -1 || query.indexOf("movedown") !== -1) {
+            const direction = query.indexOf("moveup") !== -1 ? 'up' : 'down';
+            const result = swapImages(d, cookies, path.basename(u.pathname), direction);
+            if (result) {
+                const cookieName = orderCookieName(d.relative);
+                imageHTML(response, u.pathname, d, {...cookies, [cookieName]: encodeURIComponent(JSON.stringify(result.images))}, result.setCookie);
+            } else {
+                imageHTML(response, u.pathname, d, cookies, null);
+            }
+            return;
+        }
+
         // Handle shuffle toggle from image view
         if (query.indexOf("shuffle") !== -1) {
             const seed = Date.now();
@@ -800,9 +867,10 @@ http.createServer(function(request, response) {
         }
 
         if (query.indexOf("next") !== -1 || query.indexOf("prev") !== -1) {
-            // Use shuffled order if shuffle is active
+            // Use custom order, then shuffle if active
             const shuffleSeed = cookies.shuffle ? parseInt(cookies.shuffle, 10) : null;
-            const images = shuffleSeed ? shuffleWithSeed(d.images, shuffleSeed) : d.images;
+            const orderedImages = getOrderedImages(d, cookies);
+            const images = shuffleSeed ? shuffleWithSeed(orderedImages, shuffleSeed) : orderedImages;
 
             let idx = images.indexOf(path.basename(u.pathname));
             if (idx === -1) {

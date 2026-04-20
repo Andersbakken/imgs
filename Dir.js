@@ -40,6 +40,8 @@ class Dir
                     this.dirs.push(entry.name);
                 }
             });
+            this.images.sort();
+            this.dirs.sort();
             log('Result:', this.images.length, 'media files,', this.dirs.length, 'dirs');
         } catch (err) {
             console.error("Error reading directory:", err);
