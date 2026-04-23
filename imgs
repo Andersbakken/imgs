@@ -643,7 +643,7 @@ ${password ? authCheckScript : ''}
             middleControls.push(`<a href="${link(dir.relative, 'shuffle')}">&#128256;</a>`);
         }
     }
-    middleControls.push(`<label class="upload-btn">Upload<input type="file" accept="image/*,video/*" multiple style="display:none" onchange="uploadFiles(this.files, '${dir.relative}')"></label>`);
+    middleControls.push(`<label class="upload-btn">&#128228;<input type="file" accept="image/*,video/*" multiple style="display:none" onchange="uploadFiles(this.files, '${dir.relative}')"></label>`);
     str += `<div class="controls">
   <a href="${link(dir.relative, 'zoom-')}">-</a>
   <span class="middle">${middleControls.join(' &nbsp; ')}</span>
