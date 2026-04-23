@@ -180,6 +180,22 @@ function swapImages(dir, cookies, currentFilename, direction)
     return { images: result, setCookie: `${cookieName}=${cookieValue}; Path=/` };
 }
 
+function swapByIndex(dir, cookies, imageIndex, direction)
+{
+    const images = getOrderedImages(dir, cookies);
+    if (imageIndex < 0 || imageIndex >= images.length) {
+        return null;
+    }
+    const targetIdx = direction === 'up'
+        ? (imageIndex - 1 + images.length) % images.length
+        : (imageIndex + 1) % images.length;
+    const result = [...images];
+    [result[imageIndex], result[targetIdx]] = [result[targetIdx], result[imageIndex]];
+    const cookieName = orderCookieName(dir.relative);
+    const cookieValue = encodeURIComponent(JSON.stringify(result));
+    return { images: result, setCookie: `${cookieName}=${cookieValue}; Path=/` };
+}
+
 // Mulberry32 seeded PRNG — much better distribution than LCG
 function seededRandom(seed)
 {
@@ -478,7 +494,7 @@ html, body {
 &nbsp;
      </p>
      <p>
-       &nbsp;&nbsp;&nbsp;&nbsp;<a href="${link(filepath, 'prev')}">Previous</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${link(filepath, 'next')}">Next</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${link(filepath, 'moveup')}">&uarr;</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${link(filepath, 'movedown')}">&darr;</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${link(path.dirname(filepath))}">Dir</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${toggleLink}">${toggleText}</a>&nbsp;&nbsp;&nbsp;&nbsp;${shuffleLinks}
+       &nbsp;&nbsp;&nbsp;&nbsp;<a href="${link(filepath, 'prev')}">Previous</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${link(filepath, 'next')}">Next</a>&nbsp;&nbsp;&nbsp;&nbsp;Pre:<a href="${link(filepath, 'preup')}">&uarr;</a><a href="${link(filepath, 'predown')}">&darr;</a>&nbsp;&nbsp;&nbsp;&nbsp;Post:<a href="${link(filepath, 'postup')}">&uarr;</a><a href="${link(filepath, 'postdown')}">&darr;</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${link(path.dirname(filepath))}">Dir</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${toggleLink}">${toggleText}</a>&nbsp;&nbsp;&nbsp;&nbsp;${shuffleLinks}
      </p>
 ${imagesHtml}
   </body>
@@ -843,13 +859,45 @@ http.createServer(function(request, response) {
             return;
         }
 
-        // Handle move up/down
-        if (query.indexOf("moveup") !== -1 || query.indexOf("movedown") !== -1) {
-            const direction = query.indexOf("moveup") !== -1 ? 'up' : 'down';
-            const result = swapImages(d, cookies, path.basename(u.pathname), direction);
-            if (result) {
-                const cookieName = orderCookieName(d.relative);
-                imageHTML(response, u.pathname, d, {...cookies, [cookieName]: encodeURIComponent(JSON.stringify(result.images))}, result.setCookie);
+        // Handle pre/post move up/down
+        if (query.indexOf("preup") !== -1 || query.indexOf("predown") !== -1 ||
+            query.indexOf("postup") !== -1 || query.indexOf("postdown") !== -1) {
+            const shuffleSeed = cookies.shuffle ? parseInt(cookies.shuffle, 10) : null;
+            const orderedImages = getOrderedImages(d, cookies);
+            const images = shuffleSeed ? shuffleWithSeed(orderedImages, shuffleSeed) : orderedImages;
+            const currentFilename = path.basename(u.pathname);
+            const currentIdx = images.indexOf(currentFilename);
+
+            if (currentIdx !== -1 && images.length > 1) {
+                const prevIdx = (currentIdx - 1 + images.length) % images.length;
+                const nextIdx = (currentIdx + 1) % images.length;
+                let targetIdx, direction;
+
+                if (query.indexOf("preup") !== -1) {
+                    targetIdx = prevIdx;
+                    direction = 'up';
+                } else if (query.indexOf("predown") !== -1) {
+                    targetIdx = prevIdx;
+                    direction = 'down';
+                } else if (query.indexOf("postup") !== -1) {
+                    targetIdx = nextIdx;
+                    direction = 'up';
+                } else {
+                    targetIdx = nextIdx;
+                    direction = 'down';
+                }
+
+                // When shuffled, map back to the ordered (unshuffled) index
+                const actualIdx = shuffleSeed
+                    ? orderedImages.indexOf(images[targetIdx])
+                    : targetIdx;
+                const result = swapByIndex(d, cookies, actualIdx, direction);
+                if (result) {
+                    const cookieName = orderCookieName(d.relative);
+                    imageHTML(response, u.pathname, d, {...cookies, [cookieName]: encodeURIComponent(JSON.stringify(result.images))}, result.setCookie);
+                } else {
+                    imageHTML(response, u.pathname, d, cookies, null);
+                }
             } else {
                 imageHTML(response, u.pathname, d, cookies, null);
             }
