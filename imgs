@@ -406,13 +406,13 @@ function imageHTML(response, filepath, dir, cookies, setCookieHeader)
     let imagesHtml;
     if (tripleView && prevImg && nextImg) {
         imagesHtml = `
-       <a href="${link(filepath, 'prev')}"><div class="imgbox">
+       <a href="${link(prevImg)}"><div class="imgbox">
          ${mediaTag(prevImg, 'center-fit', false)}
        </div></a>
        <div class="imgbox current">
          ${mediaTag(filepath, 'center-fit', true)}
        </div>
-       <a href="${link(filepath, 'next')}"><div class="imgbox">
+       <a href="${link(nextImg)}"><div class="imgbox">
          ${mediaTag(nextImg, 'center-fit', false)}
        </div></a>`;
     } else {
