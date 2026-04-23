@@ -163,31 +163,18 @@ function getOrderedImages(dir, cookies)
     return dir.images;
 }
 
-function swapImages(dir, cookies, currentFilename, direction)
+// Remove image at fromIdx and reinsert at toIdx (post-removal index)
+function moveImage(dir, cookies, fromIdx, toIdx)
 {
     const images = getOrderedImages(dir, cookies);
-    const idx = images.indexOf(currentFilename);
-    if (idx === -1) {
-        return null;
-    }
-    const targetIdx = direction === 'up'
-        ? (idx - 1 + images.length) % images.length
-        : (idx + 1) % images.length;
-    const result = [...images];
-    [result[idx], result[targetIdx]] = [result[targetIdx], result[idx]];
-    const cookieName = orderCookieName(dir.relative);
-    const cookieValue = encodeURIComponent(JSON.stringify(result));
-    return { images: result, setCookie: `${cookieName}=${cookieValue}; Path=/` };
-}
-
-function swapIndices(dir, cookies, idxA, idxB)
-{
-    const images = getOrderedImages(dir, cookies);
-    if (idxA < 0 || idxA >= images.length || idxB < 0 || idxB >= images.length || idxA === idxB) {
+    if (fromIdx < 0 || fromIdx >= images.length) {
         return null;
     }
     const result = [...images];
-    [result[idxA], result[idxB]] = [result[idxB], result[idxA]];
+    const [item] = result.splice(fromIdx, 1);
+    // Clamp toIdx to valid range after removal
+    const insertIdx = Math.max(0, Math.min(toIdx, result.length));
+    result.splice(insertIdx, 0, item);
     const cookieName = orderCookieName(dir.relative);
     const cookieValue = encodeURIComponent(JSON.stringify(result));
     return { images: result, setCookie: `${cookieName}=${cookieValue}; Path=/` };
@@ -1054,8 +1041,9 @@ http.createServer(function(request, response) {
         }
 
         // Handle pre/post move up/down
-        // Each arrow swaps the pre/post image with its neighbor further
-        // from current, cycling a new image into the slot each press.
+        // Rotates the non-current images around the current image.
+        // predown/postup: take from before current, place after current
+        // preup/postdown: take from after current, place before current
         if (query.indexOf("preup") !== -1 || query.indexOf("predown") !== -1 ||
             query.indexOf("postup") !== -1 || query.indexOf("postdown") !== -1) {
             const orderedImages = getOrderedImages(d, cookies);
@@ -1064,29 +1052,21 @@ http.createServer(function(request, response) {
             const n = orderedImages.length;
 
             if (currentIdx !== -1 && n > 2) {
-                const prevIdx = (currentIdx - 1 + n) % n;
-                const nextIdx = (currentIdx + 1) % n;
-                let slotIdx, neighborIdx;
+                let fromIdx, toIdx;
 
-                if (query.indexOf("preup") !== -1) {
-                    // Swap prev with the one before it (further from current)
-                    slotIdx = prevIdx;
-                    neighborIdx = (prevIdx - 1 + n) % n;
-                } else if (query.indexOf("predown") !== -1) {
-                    // Swap prev with the one after current (across current)
-                    slotIdx = prevIdx;
-                    neighborIdx = nextIdx;
-                } else if (query.indexOf("postup") !== -1) {
-                    // Swap next with the one before current (across current)
-                    slotIdx = nextIdx;
-                    neighborIdx = prevIdx;
+                if (query.indexOf("predown") !== -1 || query.indexOf("postup") !== -1) {
+                    // Take from before current, place after current
+                    fromIdx = (currentIdx - 1 + n) % n;
+                    const newCi = fromIdx < currentIdx ? currentIdx - 1 : currentIdx;
+                    toIdx = newCi + 1;
                 } else {
-                    // Swap next with the one after it (further from current)
-                    slotIdx = nextIdx;
-                    neighborIdx = (nextIdx + 1) % n;
+                    // Take from after current, place before current
+                    fromIdx = (currentIdx + 1) % n;
+                    const newCi = fromIdx < currentIdx ? currentIdx - 1 : currentIdx;
+                    toIdx = newCi;
                 }
 
-                const result = swapIndices(d, cookies, slotIdx, neighborIdx);
+                const result = moveImage(d, cookies, fromIdx, toIdx);
                 if (result) {
                     const cookieName = orderCookieName(d.relative);
                     imageHTML(response, u.pathname, d, {...cookies, [cookieName]: encodeURIComponent(JSON.stringify(result.images))}, result.setCookie);
