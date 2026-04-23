@@ -612,6 +612,23 @@ ${password ? authCheckScript : ''}
   0% { transform: translateX(100%); }
   100% { transform: translateX(-100%); }
 }
+
+.upload-btn {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  background: #007bff;
+  color: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.upload-progress {
+  display: none;
+  padding: 10px;
+  text-align: center;
+  font-size: 1rem;
+}
     </style>
   </head>
   <body>
@@ -640,6 +657,7 @@ ${password ? authCheckScript : ''}
             middleControls.push(`<a href="${link(dir.relative, 'shuffle')}">Shuffle</a>`);
         }
     }
+    middleControls.push(`<label class="upload-btn">Upload<input type="file" accept="image/*,video/*" multiple style="display:none" onchange="uploadFiles(this.files, '${dir.relative}')"></label>`);
     str += `<div class="controls">
   <a href="${link(dir.relative, 'zoom-')}">-</a>
   <span class="middle">${middleControls.join(' &nbsp; ')}</span>
@@ -691,6 +709,48 @@ ${password ? authCheckScript : ''}
         });
         str += `</div>\n`;
     }
+    str += `<div class="upload-progress" id="uploadProgress"></div>
+<script>
+function uploadFiles(files, dir) {
+    if (!files.length) {
+        return;
+    }
+    var progress = document.getElementById('uploadProgress');
+    progress.style.display = 'block';
+    var done = 0;
+    var total = files.length;
+    progress.textContent = 'Uploading 0/' + total + '...';
+
+    function uploadNext(i) {
+        if (i >= total) {
+            progress.textContent = 'Done! Reloading...';
+            window.location.reload();
+            return;
+        }
+        var formData = new FormData();
+        formData.append('file', files[i]);
+        formData.append('dir', dir);
+
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', '/__upload', true);
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                done++;
+                progress.textContent = 'Uploading ' + done + '/' + total + '...';
+                uploadNext(i + 1);
+            } else {
+                progress.textContent = 'Error uploading ' + files[i].name + ': ' + xhr.responseText;
+            }
+        };
+        xhr.onerror = function() {
+            progress.textContent = 'Network error uploading ' + files[i].name;
+        };
+        xhr.send(formData);
+    }
+    uploadNext(0);
+}
+</script>
+`;
     str += "</body>\n</html>";
 
     const headers = {"Content-Type": "text/html"};
@@ -752,6 +812,122 @@ http.createServer(function(request, response) {
             loginHTML(response, request.url);
             return;
         }
+    }
+
+    // Handle file upload
+    if (request.method === 'POST' && u.pathname === '/__upload') {
+        const contentType = request.headers['content-type'] || '';
+        const boundaryMatch = contentType.match(/boundary=(.+)/);
+        if (!boundaryMatch) {
+            response.writeHead(400, {"Content-Type": "text/plain"});
+            response.write("Missing boundary");
+            response.end();
+            return;
+        }
+        const boundary = boundaryMatch[1];
+        const chunks = [];
+        request.on('data', chunk => { chunks.push(chunk); });
+        request.on('end', () => {
+            const body = Buffer.concat(chunks);
+            const boundaryBuf = Buffer.from('--' + boundary);
+
+            // Find all boundary positions
+            const parts = [];
+            let pos = 0;
+            while (pos < body.length) {
+                const idx = body.indexOf(boundaryBuf, pos);
+                if (idx === -1) {
+                    break;
+                }
+                if (parts.length > 0) {
+                    // Previous part ends here (minus \r\n before boundary)
+                    parts[parts.length - 1].end = idx - 2;
+                }
+                // Skip boundary + \r\n
+                const afterBoundary = idx + boundaryBuf.length;
+                if (body[afterBoundary] === 0x2D && body[afterBoundary + 1] === 0x2D) {
+                    break; // closing boundary --
+                }
+                parts.push({ start: afterBoundary + 2, end: body.length });
+                pos = afterBoundary + 2;
+            }
+
+            let uploadDir = null;
+            let fileData = null;
+            let fileName = null;
+
+            for (const part of parts) {
+                const partBody = body.slice(part.start, part.end);
+                // Find header/body separator (\r\n\r\n)
+                const headerEnd = partBody.indexOf('\r\n\r\n');
+                if (headerEnd === -1) {
+                    continue;
+                }
+                const headers = partBody.slice(0, headerEnd).toString();
+                const content = partBody.slice(headerEnd + 4);
+
+                const nameMatch = headers.match(/name="([^"]+)"/);
+                if (!nameMatch) {
+                    continue;
+                }
+                const fieldName = nameMatch[1];
+
+                if (fieldName === 'dir') {
+                    uploadDir = content.toString().trim();
+                } else if (fieldName === 'file') {
+                    const filenameMatch = headers.match(/filename="([^"]+)"/);
+                    if (filenameMatch) {
+                        fileName = filenameMatch[1];
+                        // Sanitize: take only the basename, no path traversal
+                        fileName = path.basename(fileName);
+                        fileData = content;
+                    }
+                }
+            }
+
+            if (!uploadDir || !fileName || !fileData) {
+                response.writeHead(400, {"Content-Type": "text/plain"});
+                response.write("Missing file or directory");
+                response.end();
+                return;
+            }
+
+            // Resolve target directory safely
+            const targetDir = path.resolve(args.dir, uploadDir.replace(/^\/+/, ''));
+            if (!targetDir.startsWith(path.resolve(args.dir))) {
+                response.writeHead(403, {"Content-Type": "text/plain"});
+                response.write("Invalid directory");
+                response.end();
+                return;
+            }
+
+            const targetPath = path.join(targetDir, fileName);
+            // Don't overwrite existing files — append a number
+            let finalPath = targetPath;
+            if (fs.existsSync(finalPath)) {
+                const ext = path.extname(fileName);
+                const base = path.basename(fileName, ext);
+                let counter = 1;
+                while (fs.existsSync(finalPath)) {
+                    finalPath = path.join(targetDir, `${base}_${counter}${ext}`);
+                    counter++;
+                }
+            }
+
+            fs.writeFile(finalPath, fileData, (err) => {
+                if (err) {
+                    response.writeHead(500, {"Content-Type": "text/plain"});
+                    response.write("Write error: " + err.message);
+                    response.end();
+                    return;
+                }
+                log('Uploaded:', finalPath);
+                response.writeHead(200, {"Content-Type": "text/plain"});
+                response.write("OK");
+                response.end();
+            });
+        });
+        return;
     }
 
     const filePath = path.join(args.dir, u.pathname);
