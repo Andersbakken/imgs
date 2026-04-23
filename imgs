@@ -476,6 +476,21 @@ ${password ? authCheckScript : ''}
 html, body {
     height: 100%;
 }
+.nav {
+    display: flex;
+    align-items: center;
+    gap: 0.3em;
+    padding: 6px 10px;
+    flex-wrap: wrap;
+}
+.nav a {
+    text-decoration: none;
+    font-size: 1.6rem;
+    padding: 0 0.15em;
+}
+.nav .sep {
+    width: 0.4em;
+}
 .imgbox {
     display: flex;
     justify-content: center;
@@ -490,12 +505,18 @@ html, body {
     </style>
   </head>
   <body>
-     <p>
-&nbsp;
-     </p>
-     <p>
-       &nbsp;&nbsp;&nbsp;&nbsp;<a href="${link(filepath, 'prev')}">Previous</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${link(filepath, 'next')}">Next</a>&nbsp;&nbsp;&nbsp;&nbsp;Pre:<a href="${link(filepath, 'preup')}">&uarr;</a><a href="${link(filepath, 'predown')}">&darr;</a>&nbsp;&nbsp;&nbsp;&nbsp;Post:<a href="${link(filepath, 'postup')}">&uarr;</a><a href="${link(filepath, 'postdown')}">&darr;</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${link(path.dirname(filepath))}">Dir</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="${toggleLink}">${toggleText}</a>&nbsp;&nbsp;&nbsp;&nbsp;${shuffleLinks}
-     </p>
+     <div class="nav">
+       <a href="${link(filepath, 'prev')}">&#9664;</a>
+       <a href="${link(filepath, 'next')}">&#9654;</a>
+       <span class="sep"></span>
+       <a href="${link(filepath, 'preup')}">&#11014;&#xFE0E;</a><a href="${link(filepath, 'predown')}">&#11015;&#xFE0E;</a>
+       <span class="sep"></span>
+       <a href="${link(filepath, 'postup')}">&#11014;&#xFE0E;</a><a href="${link(filepath, 'postdown')}">&#11015;&#xFE0E;</a>
+       <span class="sep"></span>
+       <a href="${link(path.dirname(filepath))}">&#128193;&#xFE0E;</a>
+       <a href="${toggleLink}">${toggleText}</a>
+       ${shuffleLinks}
+     </div>
 ${imagesHtml}
   </body>
 </html>`;
