@@ -180,17 +180,15 @@ function swapImages(dir, cookies, currentFilename, direction)
     return { images: result, setCookie: `${cookieName}=${cookieValue}; Path=/` };
 }
 
-function swapByIndex(dir, cookies, imageIndex, direction)
+function moveImage(dir, cookies, fromIndex, toIndex)
 {
     const images = getOrderedImages(dir, cookies);
-    if (imageIndex < 0 || imageIndex >= images.length) {
+    if (fromIndex < 0 || fromIndex >= images.length) {
         return null;
     }
-    const targetIdx = direction === 'up'
-        ? (imageIndex - 1 + images.length) % images.length
-        : (imageIndex + 1) % images.length;
     const result = [...images];
-    [result[imageIndex], result[targetIdx]] = [result[targetIdx], result[imageIndex]];
+    const [item] = result.splice(fromIndex, 1);
+    result.splice(toIndex, 0, item);
     const cookieName = orderCookieName(dir.relative);
     const cookieValue = encodeURIComponent(JSON.stringify(result));
     return { images: result, setCookie: `${cookieName}=${cookieValue}; Path=/` };
@@ -1057,38 +1055,42 @@ http.createServer(function(request, response) {
         }
 
         // Handle pre/post move up/down
+        // Arrows cycle images through the pre/post slot by removing the
+        // image from that slot and reinserting it one position further away.
         if (query.indexOf("preup") !== -1 || query.indexOf("predown") !== -1 ||
             query.indexOf("postup") !== -1 || query.indexOf("postdown") !== -1) {
-            const shuffleSeed = cookies.shuffle ? parseInt(cookies.shuffle, 10) : null;
             const orderedImages = getOrderedImages(d, cookies);
-            const images = shuffleSeed ? shuffleWithSeed(orderedImages, shuffleSeed) : orderedImages;
             const currentFilename = path.basename(u.pathname);
-            const currentIdx = images.indexOf(currentFilename);
+            const currentIdx = orderedImages.indexOf(currentFilename);
 
-            if (currentIdx !== -1 && images.length > 1) {
-                const prevIdx = (currentIdx - 1 + images.length) % images.length;
-                const nextIdx = (currentIdx + 1) % images.length;
-                let targetIdx, direction;
+            if (currentIdx !== -1 && orderedImages.length > 2) {
+                const prevIdx = (currentIdx - 1 + orderedImages.length) % orderedImages.length;
+                const nextIdx = (currentIdx + 1) % orderedImages.length;
+                let fromIdx, toIdx;
 
                 if (query.indexOf("preup") !== -1) {
-                    targetIdx = prevIdx;
-                    direction = 'up';
+                    // Move prev image one step further before current
+                    fromIdx = prevIdx;
+                    toIdx = (prevIdx - 1 + orderedImages.length) % orderedImages.length;
                 } else if (query.indexOf("predown") !== -1) {
-                    targetIdx = prevIdx;
-                    direction = 'down';
+                    // Move prev image past current (to after current)
+                    fromIdx = prevIdx;
+                    toIdx = (currentIdx + 1) % orderedImages.length;
                 } else if (query.indexOf("postup") !== -1) {
-                    targetIdx = nextIdx;
-                    direction = 'up';
+                    // Move next image past current (to before current)
+                    fromIdx = nextIdx;
+                    toIdx = (currentIdx - 1 + orderedImages.length) % orderedImages.length;
                 } else {
-                    targetIdx = nextIdx;
-                    direction = 'down';
+                    // Move next image one step further after current
+                    fromIdx = nextIdx;
+                    toIdx = (nextIdx + 1) % orderedImages.length;
                 }
 
-                // When shuffled, map back to the ordered (unshuffled) index
-                const actualIdx = shuffleSeed
-                    ? orderedImages.indexOf(images[targetIdx])
-                    : targetIdx;
-                const result = swapByIndex(d, cookies, actualIdx, direction);
+                // Adjust toIdx for splice semantics after removal
+                if (toIdx > fromIdx) {
+                    toIdx--;
+                }
+                const result = moveImage(d, cookies, fromIdx, toIdx);
                 if (result) {
                     const cookieName = orderCookieName(d.relative);
                     imageHTML(response, u.pathname, d, {...cookies, [cookieName]: encodeURIComponent(JSON.stringify(result.images))}, result.setCookie);
