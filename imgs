@@ -1023,11 +1023,16 @@ http.createServer(function(request, response) {
 
         // Handle shuffle pre/post — swap the prev or next image with a
         // random image that is not currently visible (not prev, current, or next).
+        // Operates on the *currently visible* order (post-shuffle if active), so the
+        // swap actually changes what the user sees. Commits the result as the new
+        // custom order and disables any active shuffle.
         if (query.indexOf("shufflepre") !== -1 || query.indexOf("shufflepost") !== -1) {
             const orderedImages = getOrderedImages(d, cookies);
+            const shuffleSeed = cookies.shuffle ? parseInt(cookies.shuffle, 10) : null;
+            const visibleOrder = shuffleSeed ? shuffleWithSeed(orderedImages, shuffleSeed) : orderedImages;
             const currentFilename = path.basename(u.pathname);
-            const currentIdx = orderedImages.indexOf(currentFilename);
-            const n = orderedImages.length;
+            const currentIdx = visibleOrder.indexOf(currentFilename);
+            const n = visibleOrder.length;
 
             if (currentIdx !== -1 && n > 3) {
                 const prevIdx = (currentIdx - 1 + n) % n;
@@ -1045,12 +1050,22 @@ http.createServer(function(request, response) {
                 const pick = candidates[Math.floor(Math.random() * candidates.length)];
                 const slotIdx = query.indexOf("shufflepre") !== -1 ? prevIdx : nextIdx;
 
-                const result = [...orderedImages];
+                const result = [...visibleOrder];
                 [result[slotIdx], result[pick]] = [result[pick], result[slotIdx]];
+
                 const cookieName = orderCookieName(d.relative);
                 const cookieValue = encodeURIComponent(JSON.stringify(result));
-                const setCookie = `${cookieName}=${cookieValue}; Path=/`;
-                imageHTML(response, u.pathname, d, {...cookies, [cookieName]: cookieValue}, setCookie);
+                const setCookies = [
+                    `${cookieName}=${cookieValue}; Path=/`,
+                    `shuffle=; Path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`
+                ];
+                imageHTML(
+                    response,
+                    u.pathname,
+                    d,
+                    {...cookies, [cookieName]: cookieValue, shuffle: null},
+                    setCookies
+                );
             } else {
                 imageHTML(response, u.pathname, d, cookies, null);
             }
